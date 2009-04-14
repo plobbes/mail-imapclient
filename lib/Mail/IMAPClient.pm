@@ -5,7 +5,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.13';
+our $VERSION = '3.14';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -331,7 +331,7 @@ sub login
 {   my $self = shift;
     my $auth = $self->Authmechanism;
     return $self->authenticate($auth, $self->Authcallback)
-        if $auth ne 'LOGIN';
+        if $auth && $auth ne 'LOGIN';
 
     my $passwd = $self->Password;
     if($passwd =~ m/\W/)  # need to quote
@@ -553,8 +553,6 @@ sub select
 
 sub message_string
 {   my ($self, $msg) = @_;
-    my $expected_size = $self->size($msg);
-    defined $expected_size or return undef;  # unable to get size
 
     my $peek = $self->Peek ? '.PEEK' : '';
     my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
@@ -565,19 +563,19 @@ sub message_string
     my $string = $self->_transaction_literals;
 
     unless($self->Ignoresizeerrors)
-    {   # Should this return undef if length != expected?
-        # now, attempts are made to salvage parts of the message.
-        if( length($string) != $expected_size )
-        {   $self->LastError("message_string() "
-               . "expected $expected_size bytes but received ".length($string));
+    {   # Check size with expected size
+        my $expected_size = $self->size($msg);
+        unless(defined $expected_size)
+        {   $self->LastError( "message_string() cannot get message size,"
+                            . " you may need the IgnoreSizeErrors option");
+            return undef;
         }
 
-        $string = substr $string, 0, $expected_size
-            if length($string) > $expected_size;
-
-        if( length($string) < $expected_size )
-        {    $self->LastError("message_string() expected ".
-                "$expected_size bytes but received ".length($string));
+        # RFC822.SIZE may be wrong.
+        # See RFC2683 3.4.5 "RFC822.SIZE"
+        if(length($string) != $expected_size)
+        {   $self->LastError("message_string() "
+              . "expected $expected_size bytes but received ".length($string));
             return undef;
         }
     }
@@ -1248,18 +1246,20 @@ sub _send_line
     }
 
     $self->_debug("Sending: $string");
+    $self->_send_bytes(\$string);
+}
 
-    my $total    = 0;
-    my $temperrs = 0;
-    my $maxwrite = 0;
+sub _send_bytes($)
+{   my ($self, $byteref) = @_;
+    my ($total, $temperrs, $maxwrite) = (0, 0, 0);
     my $waittime = .02;
     my @previous_writes;
 
     my $maxagain = $self->Maxtemperrors || 10;
     undef $maxagain if $maxagain eq 'unlimited';
 
-    while($total < length $string)
-    {   my $written = syswrite($self->Socket, $string, length($string)-$total,
+    while($total < length $$byteref)
+    {   my $written = syswrite($self->Socket, $$byteref, length($$byteref)-$total,
                     $total);
 
         if(defined $written)
@@ -2255,11 +2255,11 @@ sub internaldate
 
 sub is_parent
 {   my ($self, $folder) = (shift, shift);
-    my $list = $self->list(undef, $folder) || "NO NO BAD BAD";
+    my $list = $self->list(undef, $folder) or return 0;
     my $line;
 
     for(my $m = 0; $m < @$list; $m++)
-    {   return undef
+    {   return 0
            if $list->[$m] =~ /\bNoInferior\b/i;
 
         if($list->[$m]  =~ s/(\{\d+\})\r\n$// )
@@ -2300,7 +2300,8 @@ sub is_parent
 
 sub selectable
 {   my ($self, $f) = @_;
-    not( grep /NoSelect/i, $self->list("", $f) );
+    my $info = $self->list("", $f);
+    defined $info ? not(grep /NoSelect/i, @$info) : undef;
 }
 
 sub append
@@ -2316,6 +2317,7 @@ sub append_string($$$;$$)
 {   my $self   = shift;
     my $folder = $self->Massage(shift);
     my ($text, $flags, $date) = @_;
+    defined $text or $text = '';
 
     if(defined $flags)
     {   $flags =~ s/^\s+//g;
@@ -2390,7 +2392,7 @@ sub append_file
         return undef;
     }
 
-    my $fh = IO::File->new($file, 'rb');
+    my $fh = IO::File->new($file, 'r');
     unless($fh)
     {   $self->LastError("Unable to open $file: $!");
         return undef;
@@ -2450,17 +2452,14 @@ sub append_file
     }
 
     # Now send the message itself
-    local $/ = ref $control ? "\n" : $control ? $control : "\n";
     my $buffer;
-
     while($fh->sysread($buffer, APPEND_BUFFER_SIZE))
-    {    $buffer =~ s/\A\n/\r\n/;
-         $buffer =~ s/(?<![^\r])\n/\r\n/g;
+    {    $buffer =~ s/(?<!\r)\n/\r\n/g;
 
          $self->_record( $count, [ $self->_next_index($count), "INPUT"
                                  , '{'.length($buffer)." bytes from $file}" ] );
 
-         my $bytes_written = $self->_send_line($buffer, 1);
+         my $bytes_written = $self->_send_bytes(\$buffer);
          unless($bytes_written)
          {    $self->LastError("Error sending append msg text to IMAP: $!");
               $fh->close;
@@ -2763,12 +2762,21 @@ sub quota_usage
 
 sub Quote($) { $_[0]->Massage($_[1], NonFolderArg) }
 
+# rfc3501:
+#   atom-specials   = "(" / ")" / "{" / SP / CTL / list-wildcards /
+#                  quoted-specials / resp-specials
+#   list-wildcards  = "%" / "*"
+#   quoted-specials = DQUOTE / "\"
+#   resp-specials   = "]"
+# rfc2060:
+#   CTL ::= <any ASCII control character and DEL, 0x00 - 0x1f, 0x7f>
+# Additionally, we encode strings with } and [, be less than minimal
 sub Massage($;$)
 {   my ($self, $name, $notFolder) = @_;
     $name =~ s/^\"(.*)\"$/$1/ unless $notFolder;
 
       $name =~ /["\\]/    ? "{".length($name)."}\r\n$name"
-    : $name =~ /[\s{}()]/ ? qq["$name"]
+    : $name =~ /[(){}\s[:cntrl:]%*\[\]]/ ? qq["$name"]
     :                       $name;
 }
 

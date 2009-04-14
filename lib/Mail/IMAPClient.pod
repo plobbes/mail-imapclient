@@ -1550,6 +1550,8 @@ in a scalar context). The array is the unadulterated output of the LIST
 command. (If you want your output adulterated then see the L<folders>
 method, above.)
 
+An C<undef> value is returned in case of errors.  Be sure to check for
+it.
 
 =head2 listrights
 

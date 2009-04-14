@@ -3,6 +3,27 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.14: Mon Feb 16 14:18:09 CET 2009
+
+	Fixes:
+
+	- isparent() when list() returns nothing.
+	  rt.cpan.org#42932 [Phil Lobbes]
+
+	- Quote more characters in Massage(): add  CTL, [, ], % and *
+	  rt.cpan.org#42932 [Phil Lobbes]
+
+	- message_string() will only complain about a difference between
+	  reported message size and actually received size; it will not
+	  try to correct it anymore.
+	  rt.cpan.org#42987 [Phil Lobbes]
+
+	- No error when empty text in append_string()
+	  rt.cpan.org#42987 [Phil Lobbes]
+
+	- login() should not try authenticate() if auth is empty or undef
+	  rt.cpan.org#43277 [Phil Lobbes]
+
 version 3.13: Thu Jan 15 10:29:04 CET 2009
 
 	Fixes:
