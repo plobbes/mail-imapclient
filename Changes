@@ -3,12 +3,39 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.16: Mon Apr  6 12:03:41 CEST 2009
+
+	Fixes:
+
+	- set LastError when the imap_command receives an unexpected 'BYE' answer.
+	  rt.cpan.org#44762 [Phil Lobbes]
+
+	- handle SIGPIPE cleanly.
+	  rt.cpan.org#43414 [Phil Lobbes]
+
+	- improve handling of quotes in folder names
+	  rt.cpan.org#43445 [Phil Lobbes]
+
+	- do not use $socket->eof(), because IO::Socket::SSL does not support it.
+	  rt.cpan.org#43415 [Phil Lobbes]
+
+	- remove excessive reconfiguration of fastio in _read_line()
+	  rt.cpan.org#43413 [Phil Lobbes]
+
+	Improvements:
+
+	- remove experied docs about automatically created calls, which
+	  do not exist since 3.00
+
+	- remove verbose explanation about reporting bugs.
+
 version 3.15: Fri Mar 20 13:20:39 CET 2009
 
 	Fixes:
 
 	- manual-page was using POD syntax incorrectly, which caused many
-	  broken links on search.cpan.org [R Hubbell]
+	  broken links on search.cpan.org
+	  rt.cpan.org #44212 [R Hubbell]
 
 version 3.14: Mon Feb 16 14:18:09 CET 2009
 

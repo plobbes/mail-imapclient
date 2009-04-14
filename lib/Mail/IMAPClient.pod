@@ -25,15 +25,15 @@ id.
 
 RFC2060 defines four possible states for an IMAP connection: not
 authenticated, authenticated, selected, and logged out. These
-correspond to the B<IMAPClient> constants C<Connected>,
+correspond to the IMAPClient constants C<Connected>,
 C<Authenticated>, C<Selected>, and C<Unconnected>, respectively. These
 constants are implemented as class methods, and can be used in
 conjunction with the L</Status> method to determine the status of an
-B<IMAPClient> object and its underlying IMAP session. Note that an
-B<IMAPClient> object can be in the C<Unconnected> state both before a
+IMAPClient object and its underlying IMAP session. Note that an
+IMAPClient object can be in the C<Unconnected> state both before a
 server connection is made and after it has ended. This differs slightly
 from RFC2060, which does not define a pre-connection status. For a
-discussion of the methods available for examining the B<IMAPClient>
+discussion of the methods available for examining the IMAPClient
 object's status, see the section labeled L</"Status Methods">, below.
 
 =head2 Advanced Authentication Mechanisms
@@ -68,7 +68,7 @@ could "plug in" to this module but I would like to eventually see this
 module distributed with a number of helper modules to implement various
 authentication schemes.
 
-The B<Mail::IMAPClient>'s support for add-on authentication mechanisms is
+The Mail::IMAPClient's support for add-on authentication mechanisms is
 pretty straight forward and is built upon several assumptions. Basically
 you create a callback to be used to provide the response to the server's
 challenge. The I<Authcallback> parameter contains a reference to the
@@ -124,7 +124,7 @@ L<IO::Socket::INET> alternatives, like L<IO::Socket::SSL>.
 The I<RawSocket> parameter simply records the socket to use for future
 operations, without attempting any interaction on it. In this case, you
 have to be sure to handle all the preliminar operations and to manually
-set the B<Mail::IMAPClient> object in sync with its actual status with
+set the Mail::IMAPClient object in sync with its actual status with
 respect to this socket (see below for additional parameters regarding
 this, especially the I<State> parameter).
 
@@ -144,7 +144,7 @@ introduced as a replacement for the I<Socket> parameter in older version.
 
 If you need to make your own connection to the server and perform your
 authentication manually, then you can set these parameters to keep your
-B<Mail::IMAPClient> object in sync with its actual status. Of these,
+Mail::IMAPClient object in sync with its actual status. Of these,
 only the I<State> parameter is always necessary.  The others need to be
 set only if you think your program will need them later.
 
@@ -190,7 +190,7 @@ reference is stored in the I<Authcallback> parameter as follows:
 
 where C<$Authcallback> is the code reference stored in the I<Authcallback>
 parameter, C<$challenge> is the challenge received from the IMAP server,
-and C<$imap> is a pointer to the B<Mail::IMAPClient> object. The return
+and C<$imap> is a pointer to the Mail::IMAPClient object. The return
 value from the I<Authcallback> routine should be the response to the
 challenge, and that return value will be sent by the L</authenticate>
 method to the server.
@@ -199,9 +199,9 @@ method to the server.
 
 The I<Readmethod> parameter points to a routine that will read data from
 the socket connection. This read method will replace the B<sysread> that
-would otherwise be performed by B<Mail::IMAPClient>. The replacement
+would otherwise be performed by Mail::IMAPClient. The replacement
 method is called with five arguments. The first is a pointer to the
-B<Mail::IMAPClient> object; the rest are the four arguments required by
+Mail::IMAPClient object; the rest are the four arguments required by
 the B<sysread> function. Note the third argument (which corresponds to
 the second argument to B<sysread>) is a buffer to read into; this will
 be a pointer to a scalar. So for example if your I<Readmethod> were
@@ -224,8 +224,8 @@ call; this is not a typo!
 
 The I<Prewritemethod>, if defined, should contain a pointer to a
 subroutine.  It is called immediately prior to writing to the socket
-connection. It is called by B<Mail::IMAPClient> with two arguments:
-a reference to the B<Mail::IMAPClient> object and the ASCII text
+connection. It is called by Mail::IMAPClient with two arguments:
+a reference to the Mail::IMAPClient object and the ASCII text
 string to be written.  It should return another string that will be
 the actual string sent to the IMAP server.  The idea here is that your
 I<Prewritemethod> will do whatever encryption is necessary and then
@@ -267,7 +267,7 @@ fail and cause your L</new> method call to return C<undef> (in which case
 your object will have been created but its reference will have been
 discarded before ever having been returned to you).
 
-If this happens to you, you can always check C<$@>. B<Mail::IMAPClient>
+If this happens to you, you can always check C<$@>. Mail::IMAPClient
 will populate that variable with something useful if either of the
 L</new>, L</connect>, or L</login> methods fail. In fact, as of version 2,
 the C<$@> variable will always contain error info from the last error,
@@ -287,10 +287,10 @@ lines of output. Those lines of output will include a command
 completion status code prefixed by the same tag as the original command
 string.
 
-The B<IMAPClient> module uses a simple counter to ensure that each
+The IMAPClient module uses a simple counter to ensure that each
 client command is issued with a unique tag value. This tag value is
-referred to by the B<IMAPClient> module as the transaction number. A
-history is maintained by the B<IMAPClient> object documenting each
+referred to by the IMAPClient module as the transaction number. A
+history is maintained by the IMAPClient object documenting each
 transaction. The L</Transaction> method returns the number of the last
 transaction, and can be used to retrieve lines of text from the
 object's history. 
@@ -325,14 +325,14 @@ Example:
 
 	Mail::IMAPClient->new(%args) or die "Could not new: $@\n";
 
-The L</new> method creates a new instance of an B<IMAPClient> object. If
+The L</new> method creates a new instance of an IMAPClient object. If
 the I<Server> parameter is passed as an argument to B<new>, then B<new>
 will implicitly call the L</connect> method, placing the new object in
 the I<Connected> state. If I<User> and I<Password> values are also
 provided, then L</connect> will in turn call L</login>, and the resulting
 object will be returned from B<new> in the I<Authenticated> state.
 
-If the I<Server> parameter is not supplied then the B<IMAPClient>
+If the I<Server> parameter is not supplied then the IMAPClient
 object is created in the I<Unconnected> state.
 
 If the B<new> method is passed arguments then those arguments will be
@@ -370,7 +370,7 @@ Example:
 
 returns a value equal to the numerical value associated with an object
 in the B<Authenticated> state. This value is normally maintained by the
-B<Mail::IMAPClient> module, so you typically will only query it and 
+Mail::IMAPClient module, so you typically will only query it and 
 won't need to set it.
 
 B<NOTE:> For a more programmer-friendly idiom, see the L</IsUnconnected>,
@@ -387,7 +387,7 @@ Example:
 
 returns a value equal to the numerical value associated with an object
 in the B<Connected> state.  This value is normally maintained by the
-B<Mail::IMAPClient> module, so you typically will only query it and 
+Mail::IMAPClient module, so you typically will only query it and 
 won't need to set it.
 
 B<NOTE:> For a more programmer-friendly idiom, see the L</IsUnconnected>,
@@ -406,7 +406,7 @@ argument as a correctly quoted string or a literal string.
 Note that you should not use this on folder names, since methods that accept
 folder names as an argument will quote the folder name arguments appropriately
 for you. (Exceptions to this rule are methods that come with IMAP extensions 
-that are not explicitly supported by B<Mail::IMAPClient>.)
+that are not explicitly supported by Mail::IMAPClient.)
 
 If you are getting unexpected results when running methods with values that 
 have (or might have) embedded spaces, double quotes, braces, or parentheses, 
@@ -414,7 +414,7 @@ then you may wish to call B<Quote> to quote these values. You should B<not>
 use this method with foldernames or with arguments that are wrapped in quotes 
 or parens if those quotes or parens are there because the RFC2060 spec requires 
 them. So, for example, if RFC requires an argument in this format:
-	
+
 	( argument )
 
 and your argument is (or might be) "pennies (from heaven)", then you could just
@@ -432,25 +432,25 @@ delimiting. For example:
 	$imap->Search('SUBJECT',"(no subject)");
 	# WRONG! Sends this to imap server: 
 	#<TAG> Search SUBJECT (no subject)\r\n
-	
+
 	$imap->Search('SUBJECT',$imap->Quote("(no subject)"));
 	# Correct! Sends this to imap server: 
 	#<TAG> Search SUBJECT "(no subject)"\r\n
-	
+
 
 On the other hand:
 
 	$imap->store('+FLAGS',$imap->Quote("(\Deleted)"));
 	# WRONG! Sends this to imap server: 
 	#<TAG> [UID] STORE +FLAGS "(\Deleted)"\r\n
-	
-	
+
+
 	$imap->store($imap->Quota('+FLAGS'),"(\Deleted)");
 	# CORRECT! Sends this to imap server: 
 	#<TAG> [UID] STORE +FLAGS (\Deleted)\r\n
 
 In the above, I had to abandon the many methods available to 
-B<Mail::IMAPClient> programmers (such as L</delete_message> and all-lowercase 
+Mail::IMAPClient programmers (such as L</delete_message> and all-lowercase 
 L</search>) for the sake of coming up with an example. However, there are 
 times when unexpected values in certain places will force you to B<Quote>. 
 An example is RFC822 Message-id's, which I<usually> don't contain quotes or 
@@ -471,7 +471,7 @@ everyone's problem.)
 =head2 Range
 
 Example:
-	
+
 	my %parsed = $imap->parse_headers(
 				$imap->Range($imap->messages),
 				"Date",
@@ -563,7 +563,7 @@ Example:
 
 returns a value equal to the numerical value associated with an object
 in the B<Selected> state.  This value is normally maintained by the
-B<Mail::IMAPClient> module, so you typically will only query it and 
+Mail::IMAPClient module, so you typically will only query it and 
 won't need to set it.
 
 B<NOTE:> For a more programmer-friendly idiom, see the L</IsUnconnected>,
@@ -612,7 +612,7 @@ Example:
 
 returns a value equal to the numerical value associated with an object
 in the B<Unconnected> state.  This value is normally maintained by the
-B<Mail::IMAPClient> module, so you typically will only query it and 
+Mail::IMAPClient module, so you typically will only query it and 
 won't need to set it.
 
 B<NOTE:> For a more programmer-friendly idiom, see the L</IsUnconnected>,
@@ -651,7 +651,7 @@ you should check C<$@>, which will be empty if the search was successful
 but had no matching results but populated with an error message if the 
 search encountered a problem (such as invalid parameters).
 
-A number of IMAP commands do not have corresponding B<Mail::IMAPClient>
+A number of IMAP commands do not have corresponding Mail::IMAPClient
 methods.  Please contribute them.  In pre-2.99 releases of this module,
 they were automatically created, but that was very error-prone and stalled
 the progress of this module.
@@ -790,11 +790,11 @@ override parameter settings.
 
 If you do not specify a second argument and you have not set the 
 I<Authcallback> parameter, then the first argument must be
-one of the authentication mechanisms for which B<Mail::IMAPClient>
+one of the authentication mechanisms for which Mail::IMAPClient
 has built in support.
 
 If you are interested in doing NTLM authentication then please see Mark
-Bush's L<Authen::NTLM>, which can work with B<Mail::IMAPClient> to
+Bush's L<Authen::NTLM>, which can work with Mail::IMAPClient to
 provide NTLM authentication.
 
 See also the L</login> method, which is the simplest form of
@@ -899,7 +899,7 @@ is invoked, then B<connect> will call the L</login> method after
 connecting and return the result of the L</login> method to B<connect>'s
 caller. If either or both of the I<User> and I<Password> parameters are
 unavailable but the connection to the server succeeds then B<connect>
-returns a pointer to the B<IMAPClient> object.
+returns a pointer to the IMAPClient object.
 
 The I<Server> parameter must be set (either during L</new> method
 invocation or via the L</Server> object method) before invoking B<connect>.
@@ -1066,7 +1066,7 @@ Eg:
 deleted it's almost always because it's already not there, which is what you 
 want anyway. But 'your milage may vary' and all that.)
 
-The B<IMAPClient> object must be in C<Selected> status to use the
+The IMAPClient object must be in C<Selected> status to use the
 B<delete_message> method. 
 
 B<NOTE:> All the messages identified in the input argument(s) must be
@@ -1114,7 +1114,7 @@ Example:
 
 	$imap->disconnect or warn "Could not disconnect: $@\n";
 
-Disconnects the B<IMAPClient> object from the server. Functionally
+Disconnects the IMAPClient object from the server. Functionally
 equivalent to the L</logout> method. (In fact it's actually a synonym
 for L</logout>.)
 
@@ -1122,7 +1122,7 @@ for L</logout>.)
 =head2 done
 
 Example:
-	
+
 	my $idle = $imap->idle or warn "Couldn't idle: $@\n";
 	&goDoOtherThings;
 	$imap->done($idle) or warn "Error from done: $@\n";
@@ -1383,14 +1383,14 @@ Example:
 	my $has_feature = $imap->has_capability($feature) 
 		or die "Could not do has_capability($feature): $@\n";
 
-Returns true if the IMAP server to which the B<IMAPClient> object is
+Returns true if the IMAP server to which the IMAPClient object is
 connected has the capability specified as an argument to
 B<has_capability>.
 
 =head2 idle
 
 Example:
-	
+
 	my $idle = $imap->idle or warn "Couldn't idle: $@\n";
 	goDoOtherThings();
 	$imap->done($idle) or warn "Error from done: $@\n";
@@ -1427,7 +1427,7 @@ Example:
 
 	$imap->imap4rev1 or die "Could not imap4rev1: $@\n";
 
-Returns true if the IMAP server to which the B<IMAPClient> object is
+Returns true if the IMAP server to which the IMAPClient object is
 connected has the IMAP4REV1 capability.
 
 =head2 internaldate
@@ -1577,7 +1577,7 @@ Example:
 The B<login> method uses the IMAP LOGIN client command (as defined in
 RFC2060) to log into the server. The I<User> and I<Password> parameters
 must be set before the B<login> method can be invoked. If successful,
-the B<login> method returns a pointer to the B<IMAPClient> object and
+the B<login> method returns a pointer to the IMAPClient object and
 sets the object status to I<Authenticated>. If unsuccessful, it returns
 undef. See the L</new> method for more information on how B<login> can
 be called automatically from L</new>.
@@ -1602,14 +1602,14 @@ Example:
 
 The B<logout> method issues the LOGOUT IMAP client commmand. Since the
 LOGOUT IMAP client command causes the server to end the connection,
-this also results in the B<IMAPClient> client entering the
+this also results in the IMAPClient client entering the
 I<Unconnected> state. This method does not, however, destroy the
-B<IMAPClient> object, so a program can re-invoke the L</connect> and
+IMAPClient object, so a program can re-invoke the L</connect> and
 L</login> methods if it wishes to reestablish a session later in the
 program.
 
 According to the standard, a well-behaved client should log out before
-closing the socket connection. Therefore, B<Mail::IMAPClient> will 
+closing the socket connection. Therefore, Mail::IMAPClient will 
 attempt to log out of the server during B<DESTROY> processing if the
 object being destroyed is in the L</Connected> state.
 
@@ -1776,14 +1776,14 @@ Example:
 		or die "Could not migrate: $@\n";
 
 The B<migrate> method copies the indicated messages B<from> the
-currently selected folder B<to> another B<Mail::IMAPClient> object's
+currently selected folder B<to> another Mail::IMAPClient object's
 session. It requires these arguments:
 
 =over 4
 
 =item 1. 
 
-a reference to the target B<Mail::IMAPClient> object (not the calling
+a reference to the target Mail::IMAPClient object (not the calling
 object, which is connected to the source account);
 
 =item 2.
@@ -1808,26 +1808,26 @@ mailbox; if it does not exist then B<migrate> will fail.
 
 =back
 
-The target B<Mail::IMAPClient> object should not be the same as the
+The target Mail::IMAPClient object should not be the same as the
 source. The source object is the calling object, i.e. the one whose
 B<migrate> method will be used. It cannot be the same object as the one
 specified as the target, even if you are for some reason migrating
 between folders on the same account (which would be silly anyway, since
 L</copy> can do that much more efficiently). If you try to use the same
-B<Mail::IMAPClient> object for both the caller and the reciever then
+Mail::IMAPClient object for both the caller and the reciever then
 they'll both get all screwed up and it will be your fault because I
 just warned you and you didn't listen.
 
 B<migrate> will download messages from the source in chunks to minimize
 memory usage. The size of the chunks can be controlled by changing the
-source B<Mail::IMAPClient> object's the L</Buffer> parameter. The higher
+source Mail::IMAPClient object's the L</Buffer> parameter. The higher
 the L</Buffer> value, the faster the migration, but the more memory your
 program will require. TANSTAAFL. (See the L</Buffer> parameter and
 eponymous accessor method, described above under the L</"Parameters">
 section.)
 
 The B<migrate> method uses Black Magic to hardwire the I/O between the
-two B<Mail::IMAPClient> objects in order to minimize resource
+two Mail::IMAPClient objects in order to minimize resource
 consumption. If you have older scripts that used L</message_to_file> and
 L</append_file> to move large messages between IMAP mailboxes then you
 may want to try this method as a possible replacement.
@@ -1883,7 +1883,7 @@ a reference to an array of message UID's.
 If the target folder does not exist then it will be created.
 
 If move is sucessful, then it returns a true value. Furthermore, if the
-B<Mail::IMAPClient> object is connected to a server that has the
+Mail::IMAPClient object is connected to a server that has the
 UIDPLUS capability, then the true value will be the comma-separated
 list of UID's for the newly copied messages. The list will be in the
 order in which the messages were moved. (Since B<move> uses the copy
@@ -2119,7 +2119,7 @@ Example:
 
 The B<restore_message> method is used to undo a previous
 L</delete_message> operation (but not if there has been an intervening
-L</expunge> or L</close>). The B<IMAPClient> object must be in
+L</expunge> or L</close>). The IMAPClient object must be in
 L</Selected> status to use the B<restore_message> method. 
 
 The B<restore_message> method accepts a list of arguments. If the
@@ -2346,7 +2346,7 @@ so neither do I. On the other hand, the only thing I check for in a
 I<date_text> argument is that it matches the pattern
 C</\d\d-\D\D\D-\d\d\d\d/> (notice the lack of anchors), so if your
 server lets you add something extra to a I<date_text> string then so
-will B<Mail::IMAPClient>.
+will Mail::IMAPClient.
 
 If you'd like, you can use the L</Rfc2060_date> method to convert from
 epoch time (as returned by L<time|perlfunc/time>) into an RFC2060 date
@@ -2393,7 +2393,7 @@ message sequence numbers had better be unique message id's, just as
 you'd expect.
 
 Note that when specifying the flag in question, the preceding backslash
-(\) is entirely optional. (For you, that is. B<Mail::IMAPClient> still
+(\) is entirely optional. (For you, that is. Mail::IMAPClient still
 has remember to stick it in there before passing the command to the
 server if the flag is one of the reserved flags specified in RFC2060.
 This is in fact so important that the method checks its argument and
@@ -2461,7 +2461,7 @@ Example:
 The B<size> method accepts one input argument, a sequence number (or
 message UID if the L</Uid> parameter is true). It returns the size of
 the message in the currently selected folder with the supplied sequence
-number (or UID). The B<IMAPClient> object must be in a I<Selected>
+number (or UID). The IMAPClient object must be in a I<Selected>
 state in order to use this method.
 
 
@@ -2536,7 +2536,7 @@ reference to an array rather than the array itself.
 
 The B<status> method should not be confused with the B<Status> method
 (with an uppercase 'S'), which returns information about the
-B<IMAPClient> object. (See the section labeled L</"Status Methods">,
+IMAPClient object. (See the section labeled L</"Status Methods">,
 below).
 
 
@@ -2734,10 +2734,9 @@ message(s). Of course, if the L</Uid> parameter is set to a true value
 then those message sequence numbers had better be unique message id's,
 just as you'd expect.
 
-
 =head1 Other IMAP Client Commands
 
-Until release B<2.99>, when you called a method which did not exist,
+Until release C<2.99>, when you called a method which did not exist,
 they where automatically translated into an IMAP call with the same
 name via an AUTOLOAD hack.  This "feature" was removed for various
 reasons: people made typos in the capatization of method names, and the
@@ -2781,7 +2780,7 @@ for you anyway, in which case you might as well use the L</search> method.
 =head1 Parameters
 
 There are several parameters that influence the behavior of an
-B<IMAPClient> object. Each is set by specifying a named value pair
+IMAPClient object. Each is set by specifying a named value pair
 during new method invocation as follows:
 
 	my $imap = Mail::IMAPClient->new ( parameter  => "value",
@@ -2811,7 +2810,7 @@ obtain the current value of the parameter as follows:
 	   my $forgot2 = $imap->parameter2;
 
 Note that in these examples I'm using 'parameter' and 'parameter2' as
-generic parameter names. The B<IMAPClient> object doesn't actually have
+generic parameter names. The IMAPClient object doesn't actually have
 parameters named 'parameter' and 'parameter2'. On the contrary, the
 available parameters are:
 
@@ -2824,7 +2823,7 @@ Example:
 		my $authmech = $imap->Authmechanism();
 
 If specified, the I<Authmechanism> causes the specified authentication
-mechanism to be used whenever B<Mail::IMAPClient> would otherwise invoke
+mechanism to be used whenever Mail::IMAPClient would otherwise invoke
 B<login>. If the value specified for the I<Authmechanism> parameter is not
 a valid authentication mechanism for your server then you will never ever
 be able to log in again for the rest of your perl script, probably. So you
@@ -2836,7 +2835,7 @@ might want to check, like this:
 Of course if you know your server supports your favorite authentication 
 mechanism then you know, so you can then include your I<Authmechanism> 
 with your B<new> call, as in:
-	
+
 	my $imap = Mail::IMAPClient->new(
 			User    => $user,
 			Passord => $passord,
@@ -2846,7 +2845,7 @@ with your B<new> call, as in:
 	);
 
 If I<Authmechanism> is supplied but I<Authcallback> is not then you had better be
-supporting one of the authentication mechanisms that B<Mail::IMAPClient> supports
+supporting one of the authentication mechanisms that Mail::IMAPClient supports
 "out of the box" (such as CRAM-MD5).
 
 =head2 Authcallback
@@ -2863,7 +2862,7 @@ calls to login with automatic calls that look like this (sort of):
 	$imap->authenticate($imap->Authmechanism,$imap->Authcallback) ;
 
 If I<Authmechanism> is supplied but I<Authcallback> is not then you had better be
-supporting one of the authentication mechanisms that B<Mail::IMAPClient> supports
+supporting one of the authentication mechanisms that Mail::IMAPClient supports
 "out of the box" (such as CRAM-MD5).
 
 =head2 Buffer
@@ -2917,7 +2916,7 @@ will not cause clear the history buffer to wrap.
 Setting I<Clear> to 0 turns off automatic history buffer wrapping, and
 setting it to 1 turns off the history buffer facility (except for the
 last transaction, which cannot be disabled without breaking the
-B<IMAPClient> module). Setting I<Clear> to 0 will not cause an
+IMAPClient module). Setting I<Clear> to 0 will not cause an
 immediate clearing of the history buffer; setting it to 1 (or any other
 number) will (except of course for that inevitable last transaction). 
 
@@ -3001,7 +3000,7 @@ Example:
 	$imap->Fast_io($true_or_false);
 
 The I<Fast_io> parameter controlls whether or not your
-B<Mail::IMAPClient> object will attempt to use buffered (i.e. "Fast")
+Mail::IMAPClient object will attempt to use buffered (i.e. "Fast")
 I/O. It is turned on by default. If you turn it off you will definately
 slow down your program, often to a painfull degree. However, if you are
 experience problems you may want to try this just to see if it helps.
@@ -3049,7 +3048,7 @@ The I<Maxtemperrors> parameter specifies the number of times a write
 operation is allowed to fail on a "Resource Temporarily Available"
 error. These errors can occur from time to time if the server is too
 busy to empty out its read buffer (which is logically the "other end"
-of the client's write buffer). By default, B<Mail::IMAPClient> will
+of the client's write buffer). By default, Mail::IMAPClient will
 retry an unlimited number of times, but you can adjust this 
 behavior by setting I<Maxtemperrors>. Note that after each temporary 
 error, the server will wait for a number of seconds equal to the number 
@@ -3166,10 +3165,10 @@ Example:
         $socket = $imap->RawSocket;
         # or:
         $imap->RawSocket($socketh);
- 
+
 The I<RawSocket> method can be used to obtain the socket handle of the
 current connection (say, to do I/O on the connection that is not
-otherwise supported by B<Mail::IMAPClient>) or to replace the current
+otherwise supported by Mail::IMAPClient) or to replace the current
 socket with a new handle (for instance an SSL handle, see
 L<IO::Socket::SSL>, but be sure to see the L</Socket> method as well).
 
@@ -3274,7 +3273,7 @@ Example:
 
 The I<Socket> method can be used to obtain the socket handle of the
 current connection (say, to do I/O on the connection that is not
-otherwise supported by B<Mail::IMAPClient>) or to replace the current
+otherwise supported by Mail::IMAPClient) or to replace the current
 socket with a new handle (for instance an SSL handle, see
 IO::Socket::SSL). 
 
@@ -3341,7 +3340,7 @@ Example:
 	$imap->Timeout($new_value);
 
 Specifies the timeout value in seconds for reads. Specifying a true
-value for I<Timeout> will prevent B<Mail::IMAPClient> from blocking in
+value for I<Timeout> will prevent Mail::IMAPClient from blocking in
 a read.
 
 Since timeouts are implemented via the perl L<select|perlfunc/select>
@@ -3450,7 +3449,7 @@ parameter's eponymous object method.
 =head1 Status Methods
 
 There are several object methods that return the status of the object.
-They can be used at any time to check the status of an B<IMAPClient>
+They can be used at any time to check the status of an IMAPClient
 object, but are particularly useful for determining the cause of
 failure when a connection and login are attempted as part of a single
 L</new> method invocation. The status methods are:
@@ -3537,7 +3536,6 @@ output for manual parsing. The value of the L</Clear> parameter controls
 how many transactions are in the report. (See the discussion of
 L</Clear> in L</"Parameters">, above.)
 
-
 =head2 Results
 
 The B<Results> method returns an array containing the results of one
@@ -3547,16 +3545,15 @@ unspecified then B<Results> returns the results of the last IMAP client
 command issued. If called in a scalar context, B<Results> returns an
 array reference rather than an array.
 
-
 =head2 State 
 
 The B<State> method returns a numerical value that indicates the
-current status of the B<IMAPClient> object. If invoked with an
+current status of the IMAPClient object. If invoked with an
 argument, it will set the object's state to that value. If invoked
 without an argument, it behaves just like L</Status>, below. 
 
 Normally you will not have to invoke this function. An exception is if
-you are bypassing the B<Mail::IMAPClient> module's L</connect> and/or
+you are bypassing the Mail::IMAPClient module's L</connect> and/or
 L</login> modules to set up your own connection (say, for example, over
 a secure socket), in which case you must manually do what the
 L</connect> and L</login> methods would otherwise do for you.
@@ -3564,7 +3561,7 @@ L</connect> and L</login> methods would otherwise do for you.
 =head2 Status 
 
 The B<Status> method returns a numerical value that indicates the
-current status of the B<IMAPClient> object. (Not to be confused with
+current status of the IMAPClient object. (Not to be confused with
 the L</status> method, all lower-case, which is the implementation of
 the I<STATUS> IMAP client command.)
 
@@ -3573,150 +3570,19 @@ the I<STATUS> IMAP client command.)
 The B<Transaction> method returns the tag value (or transaction number)
 of the last IMAP client command.
 
-=head1 Undocumented Methods and Subroutines
-
-There are two types of undocumented subroutines and methods. The first
-are methods that are not documented because they don't exist, even
-though they work just fine. Some of my favorite B<Mail::IMAPClient>
-methods don't exist but I use them all the time anyway. You can too,
-assuming you have your copy of RFC2060 and its extension RFC's handy.
-(By the way, you do have them handy because I gave them to you. They're
-bundled with the B<Mail::IMAPClient> distribution in the F<docs/>
-subdirectory.) You should feel free to use any of these undocumented
-methods.
-
-These undocumented methods all use what this document refers to as the
-"default method". See L<Other IMAP Client Commands and the Default
-Object Method>, above, for more information on the default method.
-
-There are also some undocumented methods and subroutines that actually
-do exist. Don't use these! If they aren't documented it's for a reason.
-They are either experimental, or intended for use by other
-B<Mail::IMAPClient> methods only, or deprecated, or broken, or all or
-none of the above. In no cases can you write programs that use these
-methods and assume that these programs will work with the next version
-of B<Mail::IMAPClient>. I never try to make these undocumented methods
-and subroutines backwards compatible because they aren't part of the
-documented API. 
-
-Occasionally I will add a method and forget to document it; in that
-case it's a bug and you should report it. (See L</"REPORTING BUGS">,
-below.) It is sometimes hard to tell the difference; if in doubt you
-may submit a bug report and see what happens! However, don't bothering
-submitting bug reports for missing documentation for any method or
-subroutine that begins with an underscore (_) character. These methods
-are always private and will never be part of the documented interface. 
-
 =head1 REPORTING BUGS
 
 Please feel free to e-mail the author at C<bug-Mail-IMAPClient@rt.cpan.org>
-if you encounter any strange behaviors. Don't worry about hurting my 
-feelings or sounding like a whiner or anything like that; 
-if there's a problem with this module you'll be doing me a favor by
-reporting it.  However, I probably won't be able to do much about it if 
-you don't include enough information, so please read and follow these
-instructions carefully.
-
-When reporting a bug, please be sure to include the following:
-
-- As much information about your environment as possible. I especially
-need to know which version of Mail::IMAPClient you are running and the
-type/version of IMAP server to which you are connecting. Your OS and
-perl verions would be helpful too.
-
-- As detailed a description of the problem as possible. (What are you
-doing? What happens? Have you found a work-around?)
-
-- An example script that demonstrates the problem (preferably with as
-few lines of code as possible!) and which calls the Mail::IMAPClient's
-L</new> method with the L</Debug> parameter set to "1". (If this generates
-a ridiculous amount of output and you're sure you know where the problem
-is, you can create your object with debugging turned off and then 
-turn it on later, just before you issue the commands that recreate the 
-problem. On the other hand, if you can do this you can probably also 
-reduce the program rather than reducing the output, and this would be 
-the best way to go under most circumstances.)
-
-- Output from the example script when it's running with the Debug
-parameter turned on. You can edit the output to remove (or preferably
-to "X" out) sensitive data, such as hostnames, user names, and
-passwords, but PLEASE do not remove the text that identifies the TYPE
-of IMAP server to which you are connecting. Note that in most versions
-of B<Mail::IMAPClient>, debugging does not print out the user or
-password from the login command line. However, if you use some other
-means of authenticating then you may need to edit the debugging output
-with an eye to security.
-
-- If something worked in a previous release and doesn't work now,
-please tell me which release did work. You don't have to test every
-intervening release; just let me know it worked in version x but
-doesn't work in version (x+n) or whatever.
-
-- Don't be surprised if I come back asking for a trace of the problem.
-To provide this, you should create a file called I<.perldb> in your
-current working directory and include the following line of text in
-that file:
-
-C<&parse_options("NonStop=1 LineInfo=mail_imapclient_db.out");>
-
-For your debugging convenience, a sample .perldb file, which was
-randomly assigned the name F<sample.perldb>, is provided in the
-distribution.
-
-Next, without changing your working directory, debug the example script
-like this: C<perl -d example_script.pl [ args ]>
-
-Note that in these examples, the script that demonstrates your problem
-is named "example_script.pl" and the trace output will be saved in
-"mail_imapclient_db.out". You should either change these values to suit
-your needs, or change your needs to suit these values.
-
-Bug reports should be mailed to: 
-
-	bug-Mail-IMAPClient@rt.cpan.org
-
-Please remember to place a SHORT description of the problem in the subject
-of the message. Please try to be a bit specific; things like "Bug
-in Mail::IMAPClient" or "Computer Problem" won't exactly expedite things
-on my end.
-
-=head1 REPORTING THINGS THAT ARE NOT BUGS
-
-If you have suggestions for extending this functionality of this module, or
-if you have a question and you can't find an answer in any of the 
-documentation (including the RFC's, which are included in this distribution
-for a reason), then you can e-mail me at the following address:
-
-	DJKERNEN@cpan.org
-
-Please note that this address is for questions, suggestions, and other comments
-about B<Mail::IMAPClient>. It's not for reporting bugs, it's not for general 
-correspondence, and it's especially not for selling porn, mortgages, Viagra, 
-penis enlargment pills, DVD copying software, or anything else.
-
-=head1 AUTHOR
-
-	David J. Kernen
-	The Kernen Consulting Group, Inc
-	DJKERNEN@cpan.org
-
 
 =head1 COPYRIGHT
 
    Copyright 1999, 2000, 2001, 2002 The Kernen Group, Inc.
    All rights reserved.
 
-This program is free software; you can redistribute it and/or modify it
-under the terms of either:
+   Copyright 2007, 2008, 2009 Mark Overmeer
 
-=over 4
-
-=item a) the "Artistic License" which comes with this Kit, or
-
-=item b) the GNU General Public License as published by the Free Software 
-Foundation; either version 1, or (at your option) any later version.
-
-=back
+This program is free software; you can redistribute under the same
+terms as Perl itself.
 
 This program is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY

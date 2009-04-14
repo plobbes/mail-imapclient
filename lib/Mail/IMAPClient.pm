@@ -5,7 +5,7 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.15';
+our $VERSION = '3.16';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -19,7 +19,7 @@ use IO::File();
 use Carp qw(carp);
 
 use Fcntl       qw(F_GETFL F_SETFL O_NONBLOCK);
-use Errno       qw/EAGAIN/;
+use Errno       qw/EAGAIN EPIPE/;
 use List::Util  qw/first min max sum/;
 use MIME::Base64;
 use File::Spec  ();
@@ -679,6 +679,8 @@ sub migrate
     my $fromSock   = $self->Socket;
     my $bufferSize = $self->Buffer || 4096;
 
+    local $SIG{PIPE} = 'IGNORE';  # avoid SIGPIPE on syswrite, handle as error
+
     unless(eval {$peer->IsConnected} )
     {    $self->LastError("Invalid or unconnected " .  ref($self)
              . " object used as target for migrate. $@");
@@ -872,6 +874,12 @@ sub migrate
                         $temperrs = 0;
                     }
 
+                    if($! == EPIPE)
+                    {   $self->LastError("Connection lost: $!");
+                        $self->State(Unconnected);
+                        return undef;
+                    }
+
                     if($! == EAGAIN || $ret==0)
                     {   if(defined $maxagain && $temperrs++ > $maxagain)
                         {   $self->LastError("Persistent '$!' errors");
@@ -916,9 +924,14 @@ sub migrate
         # Now let's send a <CR><LF> to the peer to signal end of APPEND cmd:
         {   my $wroteSoFar = 0;
             my $fromBuffer = "\r\n";
-            $wroteSoFar += syswrite($toSock,$fromBuffer,2-$wroteSoFar,$wroteSoFar)||0
-                until $wroteSoFar >= 2;
-    
+            while($wroteSoFar < 2)
+            {   $wroteSoFar += syswrite($toSock,$fromBuffer,2-$wroteSoFar,$wroteSoFar) || 0;
+                if($! == EPIPE)
+                {   $self->LastError("Connection lost: $!");
+                    $self->State(Unconnected);
+                    return undef;
+                }
+            }
         }
 
         # Finally, let's get the new message's UID from the peer:
@@ -1124,6 +1137,7 @@ sub _imap_command
 
             if($o->[DATA] =~ /^\*\s+BYE/im)
             {   $self->State(Unconnected);
+                $self->LastError($o->[DATA]) if $string !~ /^LOGOUT/i;
                 return undef;
             }
         }
@@ -1258,6 +1272,8 @@ sub _send_bytes($)
     my $maxagain = $self->Maxtemperrors || 10;
     undef $maxagain if $maxagain eq 'unlimited';
 
+    local $SIG{PIPE} = 'IGNORE';   # handle SIGPIPE as normal error
+
     while($total < length $$byteref)
     {   my $written = syswrite($self->Socket, $$byteref, length($$byteref)-$total,
                     $total);
@@ -1276,6 +1292,11 @@ sub _send_bytes($)
 
             $waittime = $self->_optimal_sleep($maxwrite, $waittime, \@previous_writes);
             next;
+        }
+
+        if($! == EPIPE)
+        {   $self->LastError("Connection lost: $!");
+            $self->State(Unconnected);
         }
 
         return undef;  # no luck
@@ -1314,7 +1335,6 @@ sub _read_line
     my $index    = $self->_next_index;
     my $timeout  = $self->Timeout;
     my $readlen  = $self->{Buffer} || 4096; 
-    my $fast_io  = $self->Fast_io;
 
     until(@$oBuffer # there's stuff in output buffer:
       && $oBuffer->[-1][TYPE] eq 'OUTPUT' # that thing is an output line:
@@ -1351,6 +1371,7 @@ sub _read_line
         if(defined $ret && $ret == 0)    # Caught EOF...
         {   my $msg = "Socket closed while reading data from server.\r\n";
             $self->LastError($msg);
+            $self->State(Unconnected);
             $self->_record($transno,
                 [ $self->_next_index($transno), "ERROR","$transno * NO $msg"]);
             return undef;
@@ -1399,9 +1420,6 @@ sub _read_line
                     {   CORE::select(undef, undef, undef, 0.001);
                     }
     
-                    fcntl($socket, F_SETFL, $self->{_fcntl})  #???need???
-                        if $fast_io && defined $self->{_fcntl};
-    
                     my $ret = $self->_sysread($socket, \$litstring
                       , $expected_size - length $litstring, length $litstring);
     
@@ -1415,7 +1433,8 @@ sub _read_line
                         return undef;
                     }
     
-                    if($ret==0 && $socket->eof)
+                    # EOF?  IO::Socket::SSL does not support eof(), so work-around.
+                    if(defined $ret && $ret==0)
                     {   $self->_record($transno,
                            [ $self->_next_index($transno), "ERROR",
                 "$transno * BYE Server unexpectedly closed connection: $!"]);
@@ -1439,7 +1458,6 @@ sub _read_line
                   . "invalid callback; must be a filehandle or CODE");
             }
 
-            $self->Fast_io($fast_io) if $fast_io;  # ???
             push @$oBuffer, [$index++, 'LITERAL', $litstring];
         }
     }
@@ -1563,11 +1581,11 @@ sub folders($)
 
         $list[$m] =~ / ^\* \s+ LIST \s+ \([^\)]*\) \s+  # * LIST (Flags)
                         (?:\" [^"]* \" | NIL  )    \s+  # "delimiter" or NIL
-                        (?:\"([^"]*)\" | (\S+))    \s*$ # "name" or name
+                        (?:\" (.*) \"  | (\S+))    \s*$ # "name" or name
                      /ix
             or next;
 
-        push @folders, $1 || $2;
+        push @folders, defined $1 ? $self->Unescape($1) : $2;
    }
 
     my @clean = _remove_doubles @folders;
@@ -2345,7 +2363,8 @@ sub append_string($$$;$$)
 
     my $bytes = $self->_send_line($command.$text."\r\n");
     unless(defined $bytes)
-    {   $self->LastError("Error sending command '$command': $@");
+    {   $command =~ s/\r\n$//;
+        $self->LastError("Error sending command '$command': $!");
         return undef;
     }
 
