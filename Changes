@@ -3,6 +3,13 @@
 All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
 before that are applied by David Kernen
 
+version 3.15: Fri Mar 20 13:20:39 CET 2009
+
+	Fixes:
+
+	- manual-page was using POD syntax incorrectly, which caused many
+	  broken links on search.cpan.org [R Hubbell]
+
 version 3.14: Mon Feb 16 14:18:09 CET 2009
 
 	Fixes:
