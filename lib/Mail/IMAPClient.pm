@@ -1,16 +1,13 @@
-
+#use Carp qw( cluck ); $SIG{__WARN__} = \&cluck; #PHIL
 # _{name} methods are undocumented and meant to be private.
 
 use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.16';
+our $VERSION = '3.17_01';
 
 use Mail::IMAPClient::MessageSet;
-
-use Carp;  # to be removed
-use Data::Dumper;  # to be removed
 
 use Socket();
 use IO::Socket();
@@ -19,9 +16,9 @@ use IO::File();
 use Carp qw(carp);
 
 use Fcntl       qw(F_GETFL F_SETFL O_NONBLOCK);
-use Errno       qw/EAGAIN EPIPE/;
+use Errno       qw/EAGAIN EPIPE ECONNRESET/;
 use List::Util  qw/first min max sum/;
-use MIME::Base64;
+use MIME::Base64 qw(encode_base64 decode_base64);
 use File::Spec  ();
 
 use constant APPEND_BUFFER_SIZE => 1024 * 1024;
@@ -56,7 +53,7 @@ sub _debug
     my $text = join '', @_;
     $text    =~ s/\r\n/\n  /g;
     $text    =~ s/\s*$/\n/;
-
+    #use POSIX qw(strftime); $text = strftime("%F %T ", localtime).$text;# PHIL
     my $fh   = $self->{Debug_fh} || \*STDERR;
     print $fh $text;
 }
@@ -67,7 +64,7 @@ BEGIN {
      qw(State Port Server Folder Peek User Password Timeout Buffer Debug
         Count Uid Debug_fh Maxtemperrors Authuser Authmechanism Authcallback
         Ranges Readmethod Showcredentials Prewritemethod Ignoresizeerrors
-        Supportedflags Proxy Domain))
+        Supportedflags Proxy Domain Maxcommandlength))
    { no strict 'refs';
      *$datum = sub { @_ > 1 ? ($_[0]->{$datum} = $_[1]) : $_[0]->{$datum}
      };
@@ -77,7 +74,7 @@ BEGIN {
 sub LastError
 {   my $self = shift;
     @_ or return $self->{LastError};
-
+    #Carp::cluck("PHIL: ".$self->Server." Errno($!) LastError:\n[@_]\n"); #PHIL
     $self->_debug("ERROR: ", $@ = $self->{LastError} = shift);
     $@;
 }
@@ -205,7 +202,7 @@ sub new
       , State         => Unconnected
       , Authmechanism => 'LOGIN'
       , Port          => 143
-      , Timeout       => 30
+      , Timeout       => 600
       , History       => {}
       };
     while(@_)
@@ -358,24 +355,27 @@ sub separator
 {   my ($self, $target) = @_;
     unless(defined $target)
     {   # separator is namespace's 1st thing's 1st thing's 2nd thing:
-        my $sep = eval { $self->namespace->[0][0][1] };
-        return $sep if $sep;
+        my $ns = $self->namespace;
+        return undef if $self->LastError;
+        if ($ns) {
+            my $sep = $ns->[0][0][1];
+            return $sep if $sep;
+        }
         $target = '';
     }
 
     return $self->{separators}{$target}
-        if $self->{separators}{$target};
+        if exists $self->{separators}{$target};
 
-    my $list = $self->list(undef, $target);
+    my $list = $self->list(undef, $target) || [];
+    return undef if $self->LastError;
+
     foreach my $line (@$list)
-    {   if($line =~ /^\*\s+LIST\s+\([^)]*\)\s+(\S+)/)
-        {   my $s = $1;
-            $s =~ s/^\"(.*?)\"$/$1/;
-            return $self->{separators}{$target} = $s;
-        }
+    {   my $rec = $self->_list_response_parse($line);
+        next unless defined $rec->{name};
+        $self->{separators}{ $rec->{name} } = $rec->{delim};
     }
-    $self->{separators}{$target} = '/';
-
+    return $self->{separators}{$target};
 }
 
 sub sort
@@ -632,7 +632,7 @@ sub message_to_file
 
     my $feedback = $self->_send_line($string);
     unless($feedback)
-    {    $self->LastError("Error sending '$string' to IMAP: $!");
+    {    $self->LastError("Error sending '$string': " . $self->LastError);
          return undef;
     }
 
@@ -769,7 +769,7 @@ sub migrate
 
         $peer->_record($ptrans, [0, "INPUT", $pstring] );
         unless($peer->_send_line($pstring))
-        {   $self->LastError("Error sending '$pstring' to target IMAP: $!");
+        {   $self->LastError("Error sending '$pstring': " . $self->LastError);
             return undef;
         }
 
@@ -824,7 +824,8 @@ sub migrate
             $self->_debug("Issuing migration command: $newstring");
 
             unless($self->_send_line($newstring))
-            {   $self->LastError("Error sending '$newstring' to source IMAP: $!");
+            {   $self->LastError("Error sending '$newstring' to source IMAP: "
+                  . $self->LastError);
                 return undef;
             }
 
@@ -874,15 +875,15 @@ sub migrate
                         $temperrs = 0;
                     }
 
-                    if($! == EPIPE)
-                    {   $self->LastError("Connection lost: $!");
+                    if($! == EPIPE or $! == ECONNRESET)
+                    {   $self->LastError("Write failed '$!'");
                         $self->State(Unconnected);
                         return undef;
                     }
 
                     if($! == EAGAIN || $ret==0)
                     {   if(defined $maxagain && $temperrs++ > $maxagain)
-                        {   $self->LastError("Persistent '$!' errors");
+                        {   $self->LastError("Persistent error '$!'");
                             return undef;
                         }
 
@@ -891,6 +892,8 @@ sub migrate
                         next;
                     }
 
+                    $self->State(Unconnected) if($! == EPIPE or $! == ECONNRESET);
+                    $self->LastError("Write failed '$!'");
                     return;  # no luck
                 }
 
@@ -924,10 +927,10 @@ sub migrate
         # Now let's send a <CR><LF> to the peer to signal end of APPEND cmd:
         {   my $wroteSoFar = 0;
             my $fromBuffer = "\r\n";
-            while($wroteSoFar < 2)
-            {   $wroteSoFar += syswrite($toSock,$fromBuffer,2-$wroteSoFar,$wroteSoFar) || 0;
-                if($! == EPIPE)
-                {   $self->LastError("Connection lost: $!");
+            until($wroteSoFar >= 2) {
+                $wroteSoFar += syswrite($toSock,$fromBuffer,2-$wroteSoFar,$wroteSoFar)||0;
+                if($! == EPIPE or $! == ECONNRESET)
+                {   $self->LastError("Write failed '$!'");
                     $self->State(Unconnected);
                     return undef;
                 }
@@ -1070,7 +1073,7 @@ sub done
     $self->_record($count, [$self->_next_index($count), "INPUT", $string] );
 
     unless($self->_send_line($string, 1))
-    {   $self->LastError("Error sending '$string' to IMAP: $!");
+    {   $self->LastError("Error sending '$string': " . $self->LastError);
         return undef;
     }
 
@@ -1115,7 +1118,7 @@ sub _imap_command
     $self->_record($count, [0, "INPUT", $string] );
 
     unless($self->_send_line($string))
-    {   $self->LastError("Error sending '$string' to IMAP: $!");
+    {   $self->LastError("Error sending '$string': " . $self->LastError);
         return undef;
     }
 
@@ -1137,7 +1140,7 @@ sub _imap_command
 
             if($o->[DATA] =~ /^\*\s+BYE/im)
             {   $self->State(Unconnected);
-                $self->LastError($o->[DATA]) if $string !~ /^LOGOUT/i;
+                $self->LastError($o->[DATA]) unless $string eq "$count LOGOUT";
                 return undef;
             }
         }
@@ -1171,7 +1174,7 @@ sub run
     $self->_record($count, [$self->_next_index($count), "INPUT", $string] );
 
     unless($self->_send_line($string, 1))
-    {   $self->LastError("Error sending '$string' to IMAP: $!");
+    {   $self->LastError("Error sending '$string': " . $self->LastError);
         return undef;
     }
 
@@ -1208,11 +1211,6 @@ sub _record
     }
 
     push @{$self->{History}{$count}}, $array;
-
-    if($array->[DATA] =~ /^\d+\s+(BAD|NO)\s/im )
-    {    $self->LastError($array->[DATA]);
-    }
-    $self;
 }
 
 #_send_line writes to the socket:
@@ -1233,25 +1231,33 @@ sub _send_line
         my $code;
         foreach my $o (@$output)
         {   $self->_record($self->Count, $o);
-            $code = $o->[DATA] =~ /(^\+|NO|BAD)/i ? $1 : undef;
-
-            if($o->[DATA] =~ /^\*\s+BYE/)
+            if($o->[DATA] =~ /^\+/)
+            {   $code = 1;
+            }
+            elsif($o->[DATA] =~ /^\*\s+BYE/)
             {   $self->State(Unconnected);
                 $self->close;
+                $self->LastError($o->[DATA]);
                 return undef;
             }
-            elsif($o->[DATA]=~ /^\d+\s+(NO|BAD)/i )
-            {   return undef;
+            elsif($o->[DATA]=~ /^\S+\s+(?:NO|BAD)/i )
+            {   $self->LastError($o->[DATA]);
+                return undef;
             }
         }
 
-        $code eq '+' or return undef;
+        unless($code)
+        {
+            $self->LastError( "unexpected response: " . join(" ", @$output) )
+              unless $self->LastError;
+            return undef;
+        }
 
         # the second part follows the non-literal output, as below.
     }
 
     unless($self->IsConnected)
-    {   $self->LastError("NO Not connected.");
+    {   $self->LastError("NO not connected");
         return undef;
     }
 
@@ -1286,7 +1292,7 @@ sub _send_bytes($)
 
         if($! == EAGAIN)
         {   if(defined $maxagain && $temperrs++ > $maxagain)
-            {   $self->LastError("Persistent error $!");
+            {   $self->LastError("Persistent error '$!'");
                 return undef;
             }
 
@@ -1294,11 +1300,9 @@ sub _send_bytes($)
             next;
         }
 
-        if($! == EPIPE)
-        {   $self->LastError("Connection lost: $!");
-            $self->State(Unconnected);
-        }
-
+        # Unconnected might be apropos for more than just these?
+        $self->State(Unconnected) if($! == EPIPE or $! == ECONNRESET);
+        $self->LastError("Write failed '$!'");
         return undef;  # no luck
     }
 
@@ -1326,7 +1330,7 @@ sub _read_line
 
     my $socket = $self->Socket;
     unless($self->IsConnected && $socket)
-    {   $self->LastError("NO Not connected");
+    {   $self->LastError("NO not connected");
         return undef;
     }
 
@@ -1343,37 +1347,38 @@ sub _read_line
     )
     {   my $transno = $self->Transaction;
 
-        if($timeout && !_read_more($socket, $timeout))
-        {   $self->LastError("Tag $transno: Timeout after $timeout seconds"
-              . " waiting for data from server");
-
-            $self->_record($transno,
-              [ $self->_next_index($transno), "ERROR"
-              , "$transno * NO Timeout after $timeout seconds " .
-                "during read from server"]);
-
-            $self->LastError("Timeout after $timeout seconds during "
-              . "read from server");
-
-            return undef;
+        if($timeout)
+        {    my $rc = _read_more($socket, $timeout);
+             unless($rc > 0)
+             {   my $msg = ( $rc ? "error" : "timeout" )
+                   . " waiting ${timeout}s for data from server"
+                   . ( $! ? ": $!" : "" );
+                 $self->LastError($msg);
+                 $self->_record($transno,
+                   [ $self->_next_index($transno), "ERROR"
+                   , "$transno * NO $msg"]);
+                 $self->_disconnect; # BUG: can not handle timeouts gracefully
+                 return undef;
+             }
         }
 
+        my $emsg;
         my $ret = $self->_sysread($socket, \$iBuffer, $readlen,length $iBuffer);
         if($timeout && !defined $ret)
-        {   # Blocking read error...
-            my $msg = "Error while reading data from server: $!\r\n";
-            $self->LastError($msg);
-            $self->_record($transno,
-               [ $self->_next_index($transno), "ERROR", "$transno * NO $msg"]);
-            return undef;
+        {   $emsg = "Error while reading data from server: $!";
+            $self->State(Unconnected) if ($! == ECONNRESET);
         }
 
         if(defined $ret && $ret == 0)    # Caught EOF...
-        {   my $msg = "Socket closed while reading data from server.\r\n";
-            $self->LastError($msg);
+        {   $emsg = "Socket closed while reading data from server";
             $self->State(Unconnected);
+        }
+
+        # save errors and return
+        if($emsg)
+        {   $self->LastError($emsg);
             $self->_record($transno,
-                [ $self->_next_index($transno), "ERROR","$transno * NO $msg"]);
+               [$self->_next_index($transno), "ERROR", "$transno * NO $emsg"]);
             return undef;
         }
 
@@ -1410,37 +1415,50 @@ sub _read_line
 
                 while($expected_size > length $litstring)
                 {   if($timeout)
-                    {    unless(_read_more($socket, $timeout))
-                         {    $self->LastError("Tag $transno: Timeout waiting for "
-                                 . "literal data from server");
-                             return undef;
-                         }
+                    {   my $rc = _read_more($socket, $timeout);
+             		unless($rc > 0)
+             		{   my $msg = ( $rc ? "error" : "timeout" )
+             		      . " waiting ${timeout}s for literal data from server"
+             		      . ( $! ? ": $!" : "" );
+             		    $self->LastError($msg);
+             		    $self->_record($transno,
+             		       [ $self->_next_index($transno), "ERROR"
+             		       , "$transno * NO $msg"]);
+                            $self->_disconnect; # BUG: can not handle timeouts
+             		    return undef;
+                        }
                     }
                     else # 1 ms before retry
                     {   CORE::select(undef, undef, undef, 0.001);
                     }
-    
+
                     my $ret = $self->_sysread($socket, \$litstring
                       , $expected_size - length $litstring, length $litstring);
-    
-                    $self->_debug("Received ret=$ret and buffer = " .
-                       "\n$litstring<END>\nwhile processing LITERAL");
-    
+
                     if($timeout && !defined $ret)
-                    {   $self->_record($transno,
-                            [ $self->_next_index($transno), "ERROR",
-                       "$transno * NO Error reading data from server: $!"]);
-                        return undef;
+                    {   $emsg = "Error while reading data from server: $!";
+                        $self->State(Unconnected) if ($! == ECONNRESET);
                     }
-    
-                    # EOF?  IO::Socket::SSL does not support eof(), so work-around.
-                    if(defined $ret && $ret==0)
-                    {   $self->_record($transno,
-                           [ $self->_next_index($transno), "ERROR",
-                "$transno * BYE Server unexpectedly closed connection: $!"]);
+
+                    # EOF: note IO::Socket::SSL does not support eof()
+                    if(defined $ret && $ret == 0)
+                    {   $emsg = "Socket closed while reading data from server";
                         $self->State(Unconnected);
+                    }
+
+                    # save errors and return
+                    if($emsg)
+                    {   $self->LastError($emsg);
+                        $self->_record($transno,
+                           [$self->_next_index($transno), "ERROR"
+                           , "$transno * NO $emsg"]);
                         return undef;
                     }
+
+                    #$self->_debug("Received ret=$ret and buffer = " .
+                    #   "\n$litstring<END>\nwhile processing LITERAL");
+                    $self->_debug("Received ret=$ret " . length($litstring)
+                      . " of $expected_size");
                 }
             }
 
@@ -1480,7 +1498,7 @@ sub _read_more($$)
     # (used by select()) doesn't know of.
     return 1 if $socket->isa("IO::Socket::SSL") && $socket->pending;
 
-    my $rvec = 0;
+    my $rvec = '';
     vec($rvec, fileno($socket), 1) = 1;
     return CORE::select($rvec, undef, $rvec, $timeout);
 }
@@ -1546,12 +1564,39 @@ sub Unescape
 sub logout
 {   my $self = shift;
     $self->_imap_command("LOGOUT");
+    $self->_disconnect;
+}
+
+sub _disconnect
+{   my $self = shift;
 
     delete $self->{Folders};
     delete $self->{_IMAP4REV1};
     $self->State(Unconnected);
     if(my $sock = delete $self->{Socket}) { eval {$sock->close} }
     $self;
+}
+
+# LIST Response
+#   Contents: name attributes, hierarchy delimiter, name
+#   Example: * LIST (\Noselect) "/" ~/Mail/foo
+sub _list_response_parse
+{   my ($self, $resp) = @_;
+
+    return undef unless defined $resp;
+    my %info;
+
+    $resp =~ s/\015?\012$//;
+    if ( $resp =~
+         / ^\* \s+ LIST \s+ \(([^\)]*)\) \s+  # * LIST (Flags)
+           (?:\" ([^"]*) \" | NIL  )     \s+  # "delimiter" or NIL
+           (?:\" (.*)    \" | (\S+))          # "name" or name
+         /ix )
+    {
+        @info{ qw(flags delim name) } =
+          ( [ split(/ /, $1) ], $2, defined($3) ? $self->Unescape($3) : $4 );
+    }
+    return wantarray ? %info : \%info;
 }
 
 sub folders($)
@@ -1579,13 +1624,9 @@ sub folders($)
             splice @list, $m+1, 1;
         }
 
-        $list[$m] =~ / ^\* \s+ LIST \s+ \([^\)]*\) \s+  # * LIST (Flags)
-                        (?:\" [^"]* \" | NIL  )    \s+  # "delimiter" or NIL
-                        (?:\" (.*) \"  | (\S+))    \s*$ # "name" or name
-                     /ix
-            or next;
-
-        push @folders, defined $1 ? $self->Unescape($1) : $2;
+        my $rec = $self->_list_response_parse($list[$m]);
+        next unless defined $rec->{name};
+        push @folders, $rec->{name};;
    }
 
     my @clean = _remove_doubles @folders;
@@ -1699,10 +1740,58 @@ sub fetch
       : ref $what || $what =~ /^[,:\d]+\w*$/ ? $self->Range($what)
       : $what;
 
-    $self->_imap_uid_command(FETCH => $take, @_)
-        or return;
+    my ( @data, $cmd );
+    my ( $seq_set, @fetch_att ) = $self->_split_sequence($take, "FETCH", @_);
 
-    wantarray ? $self->History : $self->Results;
+    for (my $x = 0; $x <= $#$seq_set ; $x++) {
+        my $seq = $seq_set->[$x];
+        $self->_imap_uid_command(FETCH => $seq, @fetch_att, @_)
+            or return;
+        my $res = $self->Results;
+
+        # only keep last command and last response (* OK ...)
+        $cmd = shift(@$res);
+        pop(@$res) if ( $x != $#{$seq_set} );
+        push ( @data, @$res );
+    }
+
+    if ( $cmd and ! wantarray ) {
+        $cmd =~ s/^(\d+\s+.*?FETCH\s+)\S+(\s*)/$1$take$2/;
+        unshift(@data, $cmd);
+    }
+
+    #wantarray ? $self->History : $self->Results;
+    wantarray ? @data : \@data;
+}
+
+# Some servers have a maximum command length.  If Maxcommandlength is
+# set, split a sequence to fit within the length restriction.
+sub _split_sequence {
+    my ($self, $take, @args) = @_;
+
+    # split take => sequence-set and (optional) fetch-att
+    my ( $seq, @att ) = split(/ /, $take, 2);
+
+    # default to the entire sequence
+    my @seqs = ($seq);
+
+    my $maxl = $self->Maxcommandlength || 0;
+    if ($maxl) {
+
+        # estimate command length, the sum of the lengths of:
+        #   tag, command, fetch-att + \r\n
+        push @args, $self->Transaction, $self->Uid ? "UID" : (), "\015\012";
+
+        # do not split on anything smaller than 10 (length 2**32)
+        my $clen = length join(" ", @att, @args);
+        my $diff = $maxl - $clen;
+        my $most = $diff > 10 ? $diff : 10;
+
+        @seqs = ( $seq =~ m/(.{1,$most})(?:,|$)/g );
+        $self->_debug("split_sequence: length($maxl-$clen) parts: ", $#seqs+1)
+          if ( $#seqs != 0 );
+    }
+    return \@seqs, @att;
 }
 
 sub fetch_hash
@@ -1716,8 +1805,13 @@ sub fetch_hash
        s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
 
-    my $msgref = scalar $self->messages;
-    my $output = scalar $self->fetch($msgref, "($what)");
+    my $msgref = $self->messages;
+    return undef if $self->LastError;
+
+    my $output = $msgref ? $self->fetch($msgref, "($what)") : undef;
+    return undef if $self->LastError;
+
+    $output ||= [];
 
     for(my $x = 0;  $x <= $#$output ; $x++)
     {   my $entry = {};
@@ -1729,7 +1823,6 @@ sub fetch_hash
 
             if($uids->{$uid}) { $entry = $uids->{$uid} }
             else              { $uids->{$uid} ||= $entry }
-
         }
         else
         {   my $mid = $l =~ /^\* (\d+) FETCH/i ? $1 : undef;
@@ -1915,7 +2008,7 @@ sub parse_headers
     my $string = "$msg BODY$peek"
        . ($fields eq 'ALL' ? '[HEADER]' : "[HEADER.FIELDS ($fields)]");
 
-    my @raw = $self->fetch($string)
+    my $raw = $self->fetch($string)
         or return undef;
 
     my %headers; # message ids to headers
@@ -1924,7 +2017,7 @@ sub parse_headers
     my %fieldmap = map { ( lc($_) => $_ ) } @fields;
     my $msgid;
 
-    foreach my $header (map {split /\r?\n/} @raw)
+    foreach my $header (map {split /\r?\n/} @$raw)
     {   # little problem: Windows2003 has UID as body, not in header
         if($header =~ s/^\* \s+ (\d+) \s+ FETCH \s+
                         \( (.*?) BODY\[HEADER (?:\.FIELDS)? .*? \]\s*//ix)
@@ -1955,11 +2048,11 @@ sub parse_headers
             next;
         }
 
-        if($header =~ s/^(\S+)\:\s*//)
+        if($header and $header =~ s/^(\S+)\:\s*//)
         {   $field = $fieldmap{lc $1} || $1;
             push @{$h->{$field}}, $header;
         }
-        elsif(ref $h->{$field} eq 'ARRAY')  # folded header
+        elsif($field and ref $h->{$field} eq 'ARRAY')  # folded header
         {   $h->{$field}[-1] .= $header;
         }
     }
@@ -2364,7 +2457,7 @@ sub append_string($$$;$$)
     my $bytes = $self->_send_line($command.$text."\r\n");
     unless(defined $bytes)
     {   $command =~ s/\r\n$//;
-        $self->LastError("Error sending command '$command': $!");
+        $self->LastError("Error sending '$command': " . $self->LastError);
         return undef;
     }
 
@@ -2440,7 +2533,7 @@ sub append_file
     $self->_record($count, [$self->_next_index($count), "INPUT", $string] );
 
     unless($self->_send_line($string))
-    {   $self->LastError("Error sending '$string' to IMAP: $!");
+    {   $self->LastError("Error sending '$string': " . $self->LastError);
         $fh->close;
         return undef;
     }
@@ -2480,7 +2573,8 @@ sub append_file
 
          my $bytes_written = $self->_send_bytes(\$buffer);
          unless($bytes_written)
-         {    $self->LastError("Error sending append msg text to IMAP: $!");
+         {    $self->LastError("Error sending append msg text: "
+                . $self->LastError);
               $fh->close;
               return undef;
          }
@@ -2529,7 +2623,7 @@ sub authenticate
     $self->_record($count, [ $self->_next_index, "INPUT", $string] );
 
     unless($self->_send_line($string))
-    {   $self->LastError("Error sending '$string' to IMAP: $!");
+    {   $self->LastError("Error sending '$string': " . $self->LastError);
         return undef;
     }
 
@@ -2605,7 +2699,7 @@ sub authenticate
     }
 
     unless($self->_send_line($response->($code, $self)))
-    {   $self->LastError("Error sending append msg text to IMAP: $!");
+    {   $self->LastError("Error sending append msg text: " . $self->LastError);
         return undef;
     }
 
@@ -2618,7 +2712,8 @@ sub authenticate
 
             if($code)
             {   unless($self->_send_line($response->($code, $self)))
-                {   $self->LastError("Error sending append msg text to IMAP: $!");
+                {   $self->LastError("Error sending append msg text: "
+                      . $self->LastError);
                     return undef;
                 }
                 undef $code;  # Clear code; we're still not finished
@@ -2730,14 +2825,17 @@ sub deny_seeing
     $self->unset_flag('\\Seen', @msgs);
 }
 
+# BUG?: consider changing @data to $data and fixing checks...
 sub size
 {   my ($self, $msg) = @_;
     my @data = $self->fetch($msg, "(RFC822.SIZE)");
-    defined $data[0] or return undef;
+    return undef if ( ! defined $data[0] or $self->LastError );
 
     my $size = first { /RFC822\.SIZE/ } @data;
-    $size =~ /RFC822\.SIZE\s+(\d+)/;
-    $1;
+
+    $size = ( $size =~ /RFC822\.SIZE\s+(\d+)/ ) ? $1 : undef
+      if (defined $size);
+    return $size;
 }
 
 sub getquotaroot
