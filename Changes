@@ -1,7 +1,66 @@
 
 == Revision History for Mail::IMAPClient
-All changes from 2.99_01 upward are made by Mark Overmeer.  The changes
-before that are applied by David Kernen
+Changes from 3.17_01+ to ?       made by Phil Lobbes
+Changes from 2.99_01  to 3.16    made by Mark Overmeer
+Changes from 0.09     to 2.99_01 made by David Kernen
+
+version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
+	Potential compatibility issues highlighted with '*':
+	- *new attribute Maxcommandlength used by fetch() to limit
+	  length of commands sent to a server.  This should removes
+	  need for utilities like imapsync to create their own split()
+	  functions and instead allows Mail::IMAPClient to hopefully
+	  "do the right thing"
+	- remove extra 'use' calls for Carp and Data::Dumper
+	- _read_more() improperly initialized vector causing select
+	  errors, thus timeouts were not working properly (now they
+	  work...)
+	- *change default timeout 30s => 600s: 30s seems too short in
+           practice
+	- *explicit import of encode_base64 and decode_base64 from
+	  MIME::Base64 note the code forces a disconnect from the
+	  server on timeout as we can not easily recover from this
+	  situation right now in the code
+	- *numerous changes of error messages, removing superfluous
+	  text and now relying on LastError instead of $! or $@ when
+	  appropriate
+	- separator():
+	  + now return undef if an error occured for NAMESPACE or LIST calls
+	  + *no longer defaults to '/' if NAMESPACE call does not succeed
+	- new internal _list_response_parse() method for parsing LIST
+          responses
+	- handle ECONNRESET errors on syswrite and mark connection as
+          Unconnected
+	  + error "Connection lost" changed to "Write failed"
+	- previously untrapped syswrite error now generate "Write
+          failed" errors
+	- fix in _imap_command where LastError would be erroneously
+          set on LOGOUT
+	- _record() no longer tries to infer errors based on data
+          being "recorded"
+	- _send_line()
+	  + cleanup in watching for: +|NO|BAD|BYE
+	  + now sets LastError when an unexpected response is seen
+	- _read_line()
+	  + handle select errors instead of ignoring them
+	  + forcefully _disconnect() on timeouts as this breaks app logic
+	  + reduced duplication of code on error handling
+	- added _disconnect() method to brute force drop connections
+          on timeout
+	- added _list_response_parse() to reduce duplicate code for
+          LIST parsing
+	- added _split_sequence() to support new Maxcommandlength argument
+	- fetch()
+	  + use new Maxcommandlength to split a request into multiple
+	    subrequests then aggregate results before passing them
+	    back to the caller
+	- fetch_hash(): added checks for failed IMAP commands
+	- parse_headers()
+	  + properly check if fetch fails
+	  + handle cases where $header and/or $field are not defined
+	- size():
+	  + return undef if LastError is set
+	  + fix case where SIZE is not found and return undef as expected
 
 version 3.16: Mon Apr  6 12:03:41 CEST 2009
 
