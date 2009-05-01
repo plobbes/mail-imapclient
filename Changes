@@ -4,6 +4,17 @@ Changes from 3.17_01+ to ?       made by Phil Lobbes
 Changes from 2.99_01  to 3.16    made by Mark Overmeer
 Changes from 0.09     to 2.99_01 made by David Kernen
 
+version 3.17-02: Fri May  1 16:44:21 EDT 2009
+        - version 3.17_02
+        - cleanup of use/imported data
+        - use Socket $CRLF in many cases not \r\n per perlport/IMAP spec
+        - new Keepalive attr for use with new()/Socket() enables SO_KEEPALIVE
+        - LastError now uses Carp::confess for stack trace if Debug is true
+        - Maxcommandlength now defaults to 1000 per RFC2683 section 3.2.1.5
+        - added noop() to support IMAP NOOP
+        - _imap_command now sets LastError if a OK/$good response is not seen
+        - fixed fetch_hash() to return FLAGS as "" not () when no FLAGS set
+
 version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
 	Potential compatibility issues highlighted with '*':
 	- *new attribute Maxcommandlength used by fetch() to limit
