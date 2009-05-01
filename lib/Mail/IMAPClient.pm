@@ -1,23 +1,22 @@
-#use Carp qw( cluck ); $SIG{__WARN__} = \&cluck; #PHIL
+
 # _{name} methods are undocumented and meant to be private.
 
 use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.17_01';
+our $VERSION = '3.17_02';
 
 use Mail::IMAPClient::MessageSet;
 
-use Socket();
-use IO::Socket();
+use IO::Socket qw(:crlf SOL_SOCKET SO_KEEPALIVE);
 use IO::Select();
 use IO::File();
-use Carp qw(carp);
+use Carp qw(carp); # $SIG{__WARN__} = \&Carp::cluck; #DEBUG
 
 use Fcntl       qw(F_GETFL F_SETFL O_NONBLOCK);
-use Errno       qw/EAGAIN EPIPE ECONNRESET/;
-use List::Util  qw/first min max sum/;
+use Errno       qw(EAGAIN EPIPE ECONNRESET);
+use List::Util  qw(first min max sum);
 use MIME::Base64 qw(encode_base64 decode_base64);
 use File::Spec  ();
 
@@ -51,9 +50,9 @@ sub _debug
     return unless $self->Debug;
 
     my $text = join '', @_;
-    $text    =~ s/\r\n/\n  /g;
+    $text    =~ s/$CRLF/\n  /og;
     $text    =~ s/\s*$/\n/;
-    #use POSIX qw(strftime); $text = strftime("%F %T ", localtime).$text;# PHIL
+    #use POSIX (); $text = POSIX::strftime("%F %T ", localtime).$text; #DEBUG
     my $fh   = $self->{Debug_fh} || \*STDERR;
     print $fh $text;
 }
@@ -64,7 +63,7 @@ BEGIN {
      qw(State Port Server Folder Peek User Password Timeout Buffer Debug
         Count Uid Debug_fh Maxtemperrors Authuser Authmechanism Authcallback
         Ranges Readmethod Showcredentials Prewritemethod Ignoresizeerrors
-        Supportedflags Proxy Domain Maxcommandlength))
+        Supportedflags Proxy Domain Maxcommandlength Keepalive))
    { no strict 'refs';
      *$datum = sub { @_ > 1 ? ($_[0]->{$datum} = $_[1]) : $_[0]->{$datum}
      };
@@ -74,9 +73,11 @@ BEGIN {
 sub LastError
 {   my $self = shift;
     @_ or return $self->{LastError};
-    #Carp::cluck("PHIL: ".$self->Server." Errno($!) LastError:\n[@_]\n"); #PHIL
-    $self->_debug("ERROR: ", $@ = $self->{LastError} = shift);
-    $@;
+    my $err = shift;
+    $err =~ s/$CRLF$//o;
+    # NOTE: older versions of Carp could cause $! to be reset
+    $self->_debug( Carp::longmess("ERROR: $err") );
+    $@ = $self->{LastError} = $err;
 }
 
 sub Fast_io(;$)
@@ -151,18 +152,17 @@ sub Rfc2060_datetime($;$)
 }
 
 # Change CRLF into \n
-# Change CRLF into \n
 
 sub Strip_cr
 {   my $class = shift;
     if( !ref $_[0] && @_==1 )
-    {   (my $string = $_[0]) =~ s/\r\n/\n/g;
+    {   (my $string = $_[0]) =~ s/$CRLF/\n/og;
         return $string;
     }
 
     wantarray
-    ?   map { s/\r\n/\n/gm; $_ } (ref $_[0] ? @{$_[0]} : @_)
-    : [ map { s/\r\n/\n/gm; $_ } (ref $_[0] ? @{$_[0]} : @_) ];
+    ?   map { s/$CRLF/\n/ogm; $_ } (ref $_[0] ? @{$_[0]} : @_)
+    : [ map { s/$CRLF/\n/ogm; $_ } (ref $_[0] ? @{$_[0]} : @_) ];
 }
 
 # The following defines a special method to deal with the Clear parameter:
@@ -198,6 +198,8 @@ sub new
       , Count         => 0
       , Fast_io       => 1
       , Clear         => 5
+      , Keepalive     => 0
+      , Maxcommandlength => 1000,
       , Maxtemperrors => 'unlimited'
       , State         => Unconnected
       , Authmechanism => 'LOGIN'
@@ -298,6 +300,8 @@ sub Socket($)
     $self->RawSocket($sock);
     $self->State(Connected);
 
+    setsockopt($sock, SOL_SOCKET, SO_KEEPALIVE, 1) if $self->Keepalive;
+
     my $code;
   LINE:
     while(my $output = $self->_read_line)
@@ -344,6 +348,11 @@ sub login
 
     $self->State(Authenticated);
     $self;
+}
+
+sub noop
+{   my ($self, $user) = @_;
+    $self->_imap_command("NOOP") ? $self->Results : undef;
 }
 
 sub proxyauth
@@ -406,7 +415,7 @@ sub list
 
     $target eq '*' || $target eq '""'
          or $target = $self->Massage($target);
-;
+
     $self->_imap_command( qq[LIST "$reference" $target] )
         or return undef;
 
@@ -436,7 +445,7 @@ sub subscribed
     for(my $m = 0; $m < @list; $m++ )
     {   $list[$m] or next;
 
-        if($list[$m] !~ /\r\n$/)
+        if($list[$m] !~ /$CRLF$/o)
         {   $list[$m]  .= $list[$m+1];
             $list[$m+1] = "";
         }
@@ -448,8 +457,8 @@ sub subscribed
                 m/ ^ \* \s+ LSUB            # * LSUB
                      \s+ \( [^\)]* \) \s+   # (Flags)
                      (?:"[^"]*"|NIL)\s+     # "delimiter" or NIL
-                     (?:"([^"]*)"|(.*))\r\n$  # Name or "Folder name"
-                 /ix;
+                     (?:"([^"]*)"|(.*))$CRLF$  # Name or "Folder name"
+                 /oix;
     }
 
     my @clean = _remove_doubles @folders;
@@ -504,7 +513,7 @@ sub getacl
                  ? $history[++$x].$history[++$x]
                  : $history[$x];
 
-        $perm =~ s/\s?\r\n$//;
+        $perm =~ s/\s?$CRLF$//o;
         until( $perm =~ /\Q$target\E"?$/ || !$perm)
         {   $perm =~ s/\s([^\s]+)\s?$// or last;
             my $p = $1;
@@ -780,7 +789,7 @@ sub migrate
              my $readSoFar  = 0;
              my $fromBuffer = '';
              $readSoFar += sysread($toSock, $fromBuffer, 1, $readSoFar) || 0
-                 until $fromBuffer =~ /\r\n/;
+                 until $fromBuffer =~ /$CRLF/o;
 
              $code = $fromBuffer =~ /^\+/ ? 'OK'
                    : $fromBuffer =~ /^(?:\d+\s(BAD|NO|OK))/ ? $1 : undef;
@@ -834,7 +843,7 @@ sub migrate
             until($chunk = $extract_size->($fromBuffer))
             {   $fromBuffer = '';
                 sysread($fromSock, $fromBuffer, 1, length $fromBuffer)
-                    until $fromBuffer =~ /\r\n$/;
+                    until $fromBuffer =~ /$CRLF$/o;
 
                 $self->_record($trans, [0, "OUTPUT", $fromBuffer]);
 
@@ -926,7 +935,7 @@ sub migrate
 
         # Now let's send a <CR><LF> to the peer to signal end of APPEND cmd:
         {   my $wroteSoFar = 0;
-            my $fromBuffer = "\r\n";
+            my $fromBuffer = $CRLF;
             until($wroteSoFar >= 2) {
                 $wroteSoFar += syswrite($toSock,$fromBuffer,2-$wroteSoFar,$wroteSoFar)||0;
                 if($! == EPIPE or $! == ECONNRESET)
@@ -1028,8 +1037,8 @@ sub body_string
 
     my $popped;
     $popped = pop @$ref    # (-: vi
-        until ($popped && $popped =~ /\)\r\n$/)  # (-: vi
-           || ! grep /\)\r\n$/, @$ref;
+        until ($popped && $popped =~ /\)$CRLF$/o)  # (-: vi
+           || ! grep /\)$CRLF$/o, @$ref;
 
      if($head =~ /BODY\[TEXT\]\s*$/i )
      {   # Next line is a literal
@@ -1069,7 +1078,7 @@ sub done
     $self->Clear($clear)
         if $self->Count >= $clear && $clear > 0;
 
-    my $string = "DONE\r\n";
+    my $string = "DONE$CRLF";
     $self->_record($count, [$self->_next_index($count), "INPUT", $string] );
 
     unless($self->_send_line($string, 1))
@@ -1122,7 +1131,7 @@ sub _imap_command
         return undef;
     }
 
-    my $code;
+    my ( $code, $data );
 
    READ:
     until($code)
@@ -1134,8 +1143,9 @@ sub _imap_command
             if($good eq '+' && $o->[DATA] =~ /^$qgood/m)
             {   $code = $qgood;
             }
-            else
-            {   ($code) = $o->[DATA] =~ /^$count\s+(OK|BAD|NO|$qgood)/mi;
+            elsif($o->[DATA] =~ /^$count\s+(OK|BAD|NO|$qgood)/mi)
+            {   ($code) = $1;
+                $data = $o->[DATA];
             }
 
             if($o->[DATA] =~ /^\*\s+BYE/im)
@@ -1146,7 +1156,13 @@ sub _imap_command
         }
     }
 
-    $code =~ /^OK|$qgood/im ? $self : undef;
+    if ( $code eq "OK" or $code eq $good )
+    {   return $self;
+    }
+    else
+    {   $self->LastError($data);
+        return undef;
+    }
 }
 
 sub _imap_uid_command
@@ -1217,10 +1233,10 @@ sub _record
 sub _send_line
 {   my ($self, $string, $suppress) = (shift, shift, shift);
 
-    $string =~ s/\r?\n?$/\r\n/
+    $string =~ s/\r?\n?$/$CRLF/o
         unless $suppress;
 
-    if($string =~ s/^([^\n{]*\{(\d+)\}\r\n)(.)/$3/)  # ;-} vi
+    if($string =~ s/^([^\n{]*\{(\d+)\}$CRLF)(.)/$3/o)  # ;-} vi
     {   # Line starts with literal
         my ($first, $len) = ($1, $2);
         $self->_debug("Sending literal: $first\tthen: $string");
@@ -1301,8 +1317,10 @@ sub _send_bytes($)
         }
 
         # Unconnected might be apropos for more than just these?
+        my $emsg = $! ? "$!" : "no error caught";
         $self->State(Unconnected) if($! == EPIPE or $! == ECONNRESET);
-        $self->LastError("Write failed '$!'");
+        $self->LastError("Write failed '$emsg'");
+
         return undef;  # no luck
     }
 
@@ -1392,9 +1410,9 @@ sub _read_line
             push @$oBuffer, [$index++, 'OUTPUT',  $current_line];
 
             ## handle LITERAL
-            # BLAH BLAH {nnn}\r\n
+            # BLAH BLAH {nnn}$CRLF
             # [nnn bytes of literally transmitted stuff]
-            # [part of line that follows literal data]\r\n
+            # [part of line that follows literal data]$CRLF
 
             my $expected_size = $1;
 
@@ -1545,7 +1563,7 @@ sub Escaped_results
     my @a;
     foreach my $line (grep defined, $self->Results($trans))
     {   if($self->_is_literal($line))
-        {   $line->[DATA] =~ s/([\\\(\)"\r\n])/\\$1/g;
+        {   $line->[DATA] =~ s/([\\\(\)"$CRLF])/\\$1/og;
             push @a, qq("$line->[DATA]");
         }
         else { push @a, $line->[DATA] }
@@ -1557,7 +1575,7 @@ sub Escaped_results
 
 sub Unescape
 {   my $whatever = $_[1];
-    $whatever    =~ s/\\([\\\(\)"\r\n])/$1/g;
+    $whatever    =~ s/\\([\\\(\)"$CRLF])/$1/og;
     $whatever;
 }
 
@@ -1618,7 +1636,7 @@ sub folders($)
 
     my @folders;
     for(my $m = 0; $m < @list; $m++ )
-    {   if($list[$m] && $list[$m] !~ /\r\n$/ )
+    {   if($list[$m] && $list[$m] !~ /$CRLF$/o )
         {   $self->_debug("folders: concatenating $list[$m] and $list[$m+1]");
             $list[$m] .= $list[$m+1];
             splice @list, $m+1, 1;
@@ -1651,7 +1669,7 @@ sub get_bodystructure
     my @out = $self->fetch($msg, "BODYSTRUCTURE");
     my $bs = "";
     my $output = first { /BODYSTRUCTURE\s+\(/i } @out;    # Wee! ;-)
-    if($output =~ /\r\n$/)
+    if($output =~ /$CRLF$/o)
     {   $bs = eval { Mail::IMAPClient::BodyStructure->new($output) };
     }
     else
@@ -1698,7 +1716,7 @@ sub get_envelope
         return undef;
     }
 
-    if($output =~ /\r\n$/ )
+    if($output =~ /$CRLF$/o )
     {   eval { $bs = Mail::IMAPClient::BodyStructure::Envelope->new($output) };
     }
     else
@@ -1775,11 +1793,11 @@ sub _split_sequence {
     # default to the entire sequence
     my @seqs = ($seq);
 
-    my $maxl = $self->Maxcommandlength || 0;
+    my $maxl = $self->Maxcommandlength;
     if ($maxl) {
 
         # estimate command length, the sum of the lengths of:
-        #   tag, command, fetch-att + \r\n
+        #   tag, command, fetch-att + $CRLF
         push @args, $self->Transaction, $self->Uid ? "UID" : (), "\015\012";
 
         # do not split on anything smaller than 10 (length 2**32)
@@ -1838,9 +1856,8 @@ sub fetch_hash
                $entry->{$w} =~ s/(?:\n?\r)+$//g;
                chomp $entry->{$w};
             }
-            else
-            {
-            $l =~ /\(      # open paren followed by ...
+            elsif($l =~
+                  /\(      # open paren followed by ...
                 (?:.*\s)?  # ...optional stuff and a space
                 \Q$w\E\s   # escaped fetch field<sp>
                 (?:"       # then: a dbl-quote
@@ -1848,15 +1865,14 @@ sub fetch_hash
                    [^"]+)  # ... nonquote char(s)
                 "|         # then closing quote; or ...
                 \(         # ...an open paren
-                  (\\.|    # then bslashed anychar or ...
-                   [^\)]+) # ... non-close-paren char
+                  ([^\)]*) # ... non-close-paren char(s)
                 \)|        # then closing paren; or ...
                 (\S+))     # unquoted string
                 (?:\s.*)?  # possibly followed by space-stuff
                 \)         # close paren
-            /xi;
-            $entry->{$w} = defined $1 ? $1 : defined $2 ? $2 : $3;
-           }
+               /xi )
+            {   $entry->{$w} = defined $1 ? $1 : defined $2 ? $2 : $3;
+            }
         }
     }
     wantarray ? %$uids : $uids;
@@ -2189,7 +2205,7 @@ sub search
     }
 
     @hits
-        or $self->_debug("Search successfull but found no matching messages");
+        or $self->_debug("Search successful but found no matching messages");
 
       wantarray     ? @hits
     : !@hits        ? undef
@@ -2373,7 +2389,7 @@ sub is_parent
     {   return 0
            if $list->[$m] =~ /\bNoInferior\b/i;
 
-        if($list->[$m]  =~ s/(\{\d+\})\r\n$// )
+        if($list->[$m]  =~ s/(\{\d+\})$CRLF$//o )
         {   $list->[$m] .= $list->[$m+1];
             splice @$list, $m+1, 1;
         }
@@ -2418,8 +2434,8 @@ sub selectable
 sub append
 {   my $self   = shift;
     my $folder = shift;
-    my $text   = @_ > 1 ? join("\r\n", @_) : shift;
-    $text      =~ s/\r?\n/\r\n/g;
+    my $text   = @_ > 1 ? join($CRLF, @_) : shift;
+    $text      =~ s/\r?\n/$CRLF/og;
 
     $self->append_string($folder, $text);
 }
@@ -2447,16 +2463,16 @@ sub append_string($$$;$$)
         if $self->Count >= $clear && $clear > 0;
 
     my $count  = $self->Count($self->Count+1);
-    $text =~ s/\r?\n/\r\n/g;
+    $text =~ s/\r?\n/$CRLF/g;
 
     my $command = "$count APPEND $folder " . ($flags ? "$flags " : "") .
-        ($date ? "$date " : "") .  "{" . length($text) . "}\r\n";
+        ($date ? "$date " : "") .  "{" . length($text) . "}$CRLF";
 
     $self->_record($count,[$self->_next_index, "INPUT", $command]);
 
-    my $bytes = $self->_send_line($command.$text."\r\n");
+    my $bytes = $self->_send_line($command.$text.$CRLF);
     unless(defined $bytes)
-    {   $command =~ s/\r\n$//;
+    {   $command =~ s/$CRLF$//o;
         $self->LastError("Error sending '$command': " . $self->LastError);
         return undef;
     }
@@ -2528,7 +2544,7 @@ sub append_file
         if $self->Count >= $clear && $clear > 0;
 
     my $length = $bare_nl_count + -s $file;
-    my $string = "$count APPEND $mfolder $fflags $date\{$length}\r\n";
+    my $string = "$count APPEND $mfolder $fflags $date\{$length}$CRLF";
 
     $self->_record($count, [$self->_next_index($count), "INPUT", $string] );
 
@@ -2566,7 +2582,7 @@ sub append_file
     # Now send the message itself
     my $buffer;
     while($fh->sysread($buffer, APPEND_BUFFER_SIZE))
-    {    $buffer =~ s/(?<!\r)\n/\r\n/g;
+    {    $buffer =~ s/(?<!\r)\n/$CRLF/og;
 
          $self->_record( $count, [ $self->_next_index($count), "INPUT"
                                  , '{'.length($buffer)." bytes from $file}" ] );
@@ -2892,7 +2908,7 @@ sub Massage($;$)
 {   my ($self, $name, $notFolder) = @_;
     $name =~ s/^\"(.*)\"$/$1/ unless $notFolder;
 
-      $name =~ /["\\]/    ? "{".length($name)."}\r\n$name"
+      $name =~ /["\\]/    ? "{".length($name)."}$CRLF$name"
     : $name =~ /[(){}\s[:cntrl:]%*\[\]]/ ? qq["$name"]
     :                       $name;
 }
