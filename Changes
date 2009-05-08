@@ -4,16 +4,28 @@ Changes from 3.17_01+ to ?       made by Phil Lobbes
 Changes from 2.99_01  to 3.16    made by Mark Overmeer
 Changes from 0.09     to 2.99_01 made by David Kernen
 
-version 3.17-02: Fri May  1 16:44:21 EDT 2009
-        - version 3.17_02
-        - cleanup of use/imported data
-        - use Socket $CRLF in many cases not \r\n per perlport/IMAP spec
-        - new Keepalive attr for use with new()/Socket() enables SO_KEEPALIVE
-        - LastError now uses Carp::confess for stack trace if Debug is true
-        - Maxcommandlength now defaults to 1000 per RFC2683 section 3.2.1.5
-        - added noop() to support IMAP NOOP
-        - _imap_command now sets LastError if a OK/$good response is not seen
-        - fixed fetch_hash() to return FLAGS as "" not () when no FLAGS set
+version 3.17_03: Fri May  8 16:37:08 EDT 2009
+	- version 3.17_03
+	- *added uidexpunge() for UID EXPUNGE UIDPLUS support
+	- *search() now DWIM: auto-escapes args, SCALAR refs not escaped
+	  rt.cpan.org#44936 [cjhenck]
+	- _quote_search() provides auto-escape capability for search()
+	- many POD updates as well as some major reformatting (incomplete)
+	- login now fails if passwd and user are not defined
+	- _sysread(): $self was in args to 'Readmethod' twice
+	- authenticate() return undef on scheme eq "" or LOGIN
+	- "require" instead "use" Digest::HMAC_MD5 for CRAM-MD5 support
+
+version 3.17_02: Fri May  1 16:44:21 EDT 2009
+	- version 3.17_02
+	- cleanup of use/imported data
+	- use Socket $CRLF in many cases not \r\n per perlport/IMAP spec
+	- new Keepalive attr for use with new()/Socket() enables SO_KEEPALIVE
+	- LastError now uses Carp::confess for stack trace if Debug is true
+	- Maxcommandlength now defaults to 1000 per RFC2683 section 3.2.1.5
+	- added noop() to support IMAP NOOP
+	- _imap_command now sets LastError if a OK/$good response is not seen
+	- fixed fetch_hash() to return FLAGS as "" not () when no FLAGS set
 
 version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
 	Potential compatibility issues highlighted with '*':
@@ -27,7 +39,7 @@ version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
 	  errors, thus timeouts were not working properly (now they
 	  work...)
 	- *change default timeout 30s => 600s: 30s seems too short in
-           practice
+	   practice
 	- *explicit import of encode_base64 and decode_base64 from
 	  MIME::Base64 note the code forces a disconnect from the
 	  server on timeout as we can not easily recover from this
@@ -39,16 +51,16 @@ version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
 	  + now return undef if an error occured for NAMESPACE or LIST calls
 	  + *no longer defaults to '/' if NAMESPACE call does not succeed
 	- new internal _list_response_parse() method for parsing LIST
-          responses
+	  responses
 	- handle ECONNRESET errors on syswrite and mark connection as
-          Unconnected
+	  Unconnected
 	  + error "Connection lost" changed to "Write failed"
 	- previously untrapped syswrite error now generate "Write
-          failed" errors
+	  failed" errors
 	- fix in _imap_command where LastError would be erroneously
-          set on LOGOUT
+	  set on LOGOUT
 	- _record() no longer tries to infer errors based on data
-          being "recorded"
+	  being "recorded"
 	- _send_line()
 	  + cleanup in watching for: +|NO|BAD|BYE
 	  + now sets LastError when an unexpected response is seen
@@ -57,9 +69,9 @@ version 3.17_01: Fri Apr 24 18:36:45 EDT 2009
 	  + forcefully _disconnect() on timeouts as this breaks app logic
 	  + reduced duplication of code on error handling
 	- added _disconnect() method to brute force drop connections
-          on timeout
+	  on timeout
 	- added _list_response_parse() to reduce duplicate code for
-          LIST parsing
+	  LIST parsing
 	- added _split_sequence() to support new Maxcommandlength argument
 	- fetch()
 	  + use new Maxcommandlength to split a request into multiple
