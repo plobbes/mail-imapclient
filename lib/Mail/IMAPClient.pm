@@ -5,20 +5,20 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.17_02';
+our $VERSION = '3.17_03';
 
 use Mail::IMAPClient::MessageSet;
 
 use IO::Socket qw(:crlf SOL_SOCKET SO_KEEPALIVE);
-use IO::Select();
-use IO::File();
-use Carp qw(carp); # $SIG{__WARN__} = \&Carp::cluck; #DEBUG
+use IO::Select ();
+use IO::File   ();
+use Carp       qw(carp); #$SIG{__WARN__} = \&Carp::cluck; #DEBUG
 
-use Fcntl       qw(F_GETFL F_SETFL O_NONBLOCK);
-use Errno       qw(EAGAIN EPIPE ECONNRESET);
-use List::Util  qw(first min max sum);
+use Fcntl        qw(F_GETFL F_SETFL O_NONBLOCK);
+use Errno        qw(EAGAIN EPIPE ECONNRESET);
+use List::Util   qw(first min max sum);
 use MIME::Base64 qw(encode_base64 decode_base64);
-use File::Spec  ();
+use File::Spec   ();
 
 use constant APPEND_BUFFER_SIZE => 1024 * 1024;
 
@@ -152,7 +152,6 @@ sub Rfc2060_datetime($;$)
 }
 
 # Change CRLF into \n
-
 sub Strip_cr
 {   my $class = shift;
     if( !ref $_[0] && @_==1 )
@@ -166,7 +165,6 @@ sub Strip_cr
 }
 
 # The following defines a special method to deal with the Clear parameter:
-
 sub Clear
 {   my ($self, $clear) = @_;
     defined $clear or return $self->{Clear};
@@ -288,7 +286,7 @@ sub RawSocket(;$)
 
     delete $self->{_fcntl};
     $self->Fast_io($self->Fast_io);
- 
+
     $sock;
 }
 
@@ -335,13 +333,16 @@ sub login
         if $auth && $auth ne 'LOGIN';
 
     my $passwd = $self->Password;
+    my $id     = $self->User;
+
+    return undef unless ( defined($passwd) and defined($id) );
+
     if($passwd =~ m/\W/)  # need to quote
     {   $passwd =~ s/(["\\])/\\$1/g;
         $passwd = qq{"$passwd"};
     }
 
-    my $id     = $self->User;
-    $id        = qq{"$id"} if $id !~ /^".*"$/;
+    $id = qq{"$id"} if $id !~ /^".*"$/;
 
     $self->_imap_command("LOGIN $id $passwd")
         or return undef;
@@ -1505,7 +1506,7 @@ sub _read_line
 sub _sysread($$$$)
 {   my ($self, $fh, $buf, $len, $off) = @_;
     my $rm   = $self->Readmethod;
-    $rm ? $rm->($self, @_) : sysread($fh, $$buf, $len, $off);
+    $rm ? $rm->(@_) : sysread($fh, $$buf, $len, $off);
 }
 
 sub _read_more($$)
@@ -1931,6 +1932,27 @@ sub expunge
     wantarray ? $self->History : $self->Results;
 }
 
+sub uidexpunge
+{   my ($self, $msgspec) = ( shift, shift );
+
+    my $msg = UNIVERSAL::isa($msgspec, 'Mail::IMAPClient::MessageSet')
+      ? $msgspec
+      : $self->Range($msgspec);
+
+    $msg->cat(@_) if @_;
+
+    if ($self->Uid)
+    {   $self->_imap_command("UID EXPUNGE $msg")
+          or return undef;
+    }
+    else
+    {   $self->LastError("Uid must be enabled for uidexpunge");
+        return undef;
+    }
+
+    wantarray ? $self->History : $self->Results;
+}
+
 sub rename
 {   my ($self, $from, $to) = @_;
 
@@ -2185,13 +2207,27 @@ sub or
 
 sub disconnect { shift->logout }
 
+sub _quote_search {
+    my ($self, @args) = @_;
+    my @ret;
+    foreach my $v (@args) {
+        if( ref($v) eq "SCALAR" )
+        {   push( @ret, $$v );
+        }
+        elsif( exists $SEARCH_KEYS{ uc($_) } )
+        {   push( @ret, $v );
+        }
+        else
+        {   push( @ret, $self->Quote($v) );
+        }
+    }
+    return @ret;
+}
+
 sub search
 {   my ($self, @a) = @_;
 
-    $@ = "";
-    # massage?
-    $a[-1] = $self->Massage($a[-1], 1)
-        if @a > 1 && !exists $SEARCH_KEYS{uc $a[-1]};
+    @a = $self->_quote_search(@a);
 
     $self->_imap_uid_command(SEARCH => @a)
         or return undef;
@@ -2514,7 +2550,7 @@ sub append_file
 
     $flags ||= '';
     my $fflags = $flags =~ m/^\(.*\)$/ ? $flags : "($flags)";
-    
+
     unless(-f $file)
     {   $self->LastError("File $file not found.");
         return undef;
@@ -2633,6 +2669,15 @@ sub authenticate
     $self->Clear($clear)
         if $self->Count >= $clear && $clear > 0;
 
+    if(! $scheme)
+    {   $self->LastError("Authmechanism not set");
+        return undef;
+    }
+    elsif($scheme eq 'LOGIN')
+    {   $self->LastError("Authmechanism LOGIN is invalid, use login()");
+        return undef;
+    }
+
     my $count   = $self->Count($self->Count+1);
     my $string  = "$count AUTHENTICATE $scheme";
 
@@ -2665,7 +2710,7 @@ sub authenticate
     if($scheme eq 'CRAM-MD5')
     {   $response ||= sub
           { my ($code, $client) = @_;
-            use Digest::HMAC_MD5;
+            require Digest::HMAC_MD5;
             my $hmac = Digest::HMAC_MD5::hmac_md5_hex(decode_base64($code), $client->Password);
             encode_base64($client->User." ".$hmac, '');
           };
