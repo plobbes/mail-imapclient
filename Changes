@@ -4,6 +4,40 @@ Changes from 3.17_01+ to ?       made by Phil Lobbes
 Changes from 2.99_01  to 3.16    made by Mark Overmeer
 Changes from 0.09     to 2.99_01 made by David Kernen
 
+version 3.17_04: Fri May 15 17:18:52 EDT 2009
+	- version 3.17_04
+	- updated POD with new reconnect() method and Reconnectretry attr
+	- *new _imap_command() after renaming old one to _imap_command_do
+	  support retrying commands X times EPIPE/ECONNRESET errors
+	- *added Reconnectretry attr to control number of retry
+	  attempts (default is 0 - no reconnect/retry)
+	- *added reconnect() method to support Reconnectretry attr
+	  reconnect and updated _imap_command() method
+	- *_imap_command_do will return undef if command given has no TAG
+	- fixed message_string() logic/errors for failed size() calls
+	- local-ize $! anywhere we use Carp routines as older versions
+	  of Carp could cause $! to be reset
+	- several 'BUG?' comments -- raising red flag for future work
+	- minor cleanup of sort() logic
+	- reduce duplicate code, hopefully improved error handling:
+	  new _list_or_lsub() for list() and lsub()
+	  new _folders_or_subscribed() for folders() and subscribed()
+	  + new _list_response_preprocess() keeping old code/logic in
+	    for now, but may remove in the future (for buggy servers?)
+	- some updates for migrate() but this method needs much work
+	- body_string() now handles fetch() errors
+	- tag_and_run now handles _imap_command() errors
+	- changed non-timeout CORE::select() timeout from 0.001 to 0.025
+	- minor cleanup of _read_line() error handling/debug output
+	- get_bodystructure() handle more fetch() errors
+	- expunge() handle select() errors
+	- restore_message() handle store() errors
+	- uidvalidity() handle status() errors
+	- uidnext() handle status() errors
+	- is_parent() use _list_response_preprocess() for parsing
+	- move() send delete_message() errors to stderr
+	- simplify size() method
+
 version 3.17_03: Fri May  8 16:37:08 EDT 2009
 	- version 3.17_03
 	- *added uidexpunge() for UID EXPUNGE UIDPLUS support
