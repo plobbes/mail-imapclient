@@ -1969,6 +1969,17 @@ the IMAP client command "STATUS folder RECENT"), or C<undef> in the
 case of an error.  The B<recent_count> method was contributed by Rob
 Deker (deker@ikimbo.com).
 
+=head2 reconnect
+
+Example:
+  $imap->noop or $imap->reconnect or die "noop failed: $@\n";
+
+Attempt to reconnect if the IMAP connection unless $imap is already in
+the IsConnected state.  This method calls L</connect> and optionally
+L</select> if a Folder was previously selected.  On success, returns
+the (same) $imap object.  On failure <undef> is returned and
+L</LastError> is set.
+
 =head2 rename
 
 Example:
@@ -3160,6 +3171,16 @@ where your method can get to it, possibly in the I<Mail::IMAPClient>
 object itself.
 
 See also L</Prewritemethod>.
+
+=head2 Reconnectretry
+
+If an imap connection sits idle too long, the connection may be closed
+by the server or firewall, etc.  The B<Reconnectretry> parameter, when
+given a positive integer value, will cause Mail::IMAPClient to
+retrying IMAP commands up to X times when an EPIPE or ECONNRESET error
+occurs.  This is disabled (0) by default.
+
+See also L</Keepalive>
 
 =head2 Server
 
