@@ -5,14 +5,14 @@ use warnings;
 use strict;
 
 package Mail::IMAPClient;
-our $VERSION = '3.17_03';
+our $VERSION = '3.17_04';
 
 use Mail::IMAPClient::MessageSet;
 
 use IO::Socket qw(:crlf SOL_SOCKET SO_KEEPALIVE);
 use IO::Select ();
 use IO::File   ();
-use Carp       qw(carp); #$SIG{__WARN__} = \&Carp::cluck; #DEBUG
+use Carp       qw(carp); #local $SIG{__WARN__} = \&Carp::cluck; #DEBUG
 
 use Fcntl        qw(F_GETFL F_SETFL O_NONBLOCK);
 use Errno        qw(EAGAIN EPIPE ECONNRESET);
@@ -63,7 +63,7 @@ BEGIN {
      qw(State Port Server Folder Peek User Password Timeout Buffer Debug
         Count Uid Debug_fh Maxtemperrors Authuser Authmechanism Authcallback
         Ranges Readmethod Showcredentials Prewritemethod Ignoresizeerrors
-        Supportedflags Proxy Domain Maxcommandlength Keepalive))
+        Supportedflags Proxy Domain Maxcommandlength Keepalive Reconnectretry))
    { no strict 'refs';
      *$datum = sub { @_ > 1 ? ($_[0]->{$datum} = $_[1]) : $_[0]->{$datum}
      };
@@ -74,9 +74,12 @@ sub LastError
 {   my $self = shift;
     @_ or return $self->{LastError};
     my $err = shift;
-    $err =~ s/$CRLF$//o;
-    # NOTE: older versions of Carp could cause $! to be reset
-    $self->_debug( Carp::longmess("ERROR: $err") );
+    if (defined $err)
+    {
+        $err =~ s/$CRLF$//o;
+        local($!);   # old versions of Carp could reset $!
+        $self->_debug( Carp::longmess("ERROR: $err") );
+    }
     $@ = $self->{LastError} = $err;
 }
 
@@ -225,13 +228,14 @@ sub new
         $self->_debug("Using Mail::IMAPClient version $VERSION on perl $]");
     }
 
+    # BUG? return undef on Socket() failure?
     $self->Socket($self->{Socket})
         if $self->{Socket};
 
     if($self->{Rawsocket})
     {
         my $sock = delete $self->{Rawsocket};
-        # Ignore Rawsocket if Socket has already been set -- TODO carp/croak?
+        # Ignore Rawsocket if Socket is set.  BUG? should we carp/croak?
         $self->RawSocket($sock) unless $self->{Socket};
     }
 
@@ -240,6 +244,8 @@ sub new
 
 sub connect(@)
 {   my $self = shift;
+
+    # BUG? We should restrict which keys can be passed/set here.
     %$self = (%$self, @_);
 
     my $server  = $self->Server;
@@ -311,7 +317,7 @@ sub Socket($)
             last LINE;
         }
     }
-    $code or return undef;
+    $code or return undef;   # LastError may be set by _read_line
 
     if($code eq 'BYE' || $code eq 'NO')
     {   $self->State(Unconnected);
@@ -388,84 +394,106 @@ sub separator
     return $self->{separators}{$target};
 }
 
+# BUG? caller gets empty list even if Error
+# - returning an array with a single undef value seems even worse though
 sub sort
 {   my ($self, $crit, @a) = @_;
 
     $crit =~ /^\(.*\)$/        # wrap criteria in parens
         or $crit = "($crit)";
 
-    $self->_imap_uid_command(SORT => $crit, @a)
-         or return wantarray ? () : [];
-
-    my @results = $self->History;
     my @hits;
-    foreach (@results)
-    {   chomp;
-        s/\r$//;
-        s/^\*\s+SORT\s+// or next;
-        push @hits, grep /\d/, split;
+    if ( $self->_imap_uid_command(SORT => $crit, @a) )
+    {   my @results = $self->History;
+        foreach (@results)
+        {   chomp;
+            s/\r$//;
+            s/^\*\s+SORT\s+// or next;
+            push @hits, grep /\d/, split;
+        }
     }
     wantarray ? @hits : \@hits;
 }
 
-sub list
-{   my ($self, $reference, $target) = @_;
-    defined $reference or $reference = "";
+sub _list_or_lsub
+{   my ($self, $cmd, $reference, $target) = @_;
+    defined $reference or $reference = '';
     defined $target    or $target    = '*';
     length $target     or $target    = '""';
 
     $target eq '*' || $target eq '""'
-         or $target = $self->Massage($target);
+        or $target = $self->Massage($target);
 
-    $self->_imap_command( qq[LIST "$reference" $target] )
+    $self->_imap_command( qq($cmd "$reference" $target) )
         or return undef;
 
     wantarray ? $self->History : $self->Results;
 }
 
-sub lsub
-{   my ($self, $reference, $target) = @_;
-    defined $reference or $reference = "";
-    defined $target    or $target = '*';
-    $target = $self->Massage($target);
+sub list { shift->_list_or_lsub( "LIST", @_ ) }
+sub lsub { shift->_list_or_lsub( "LSUB", @_ ) }
 
-    $self->_imap_command( qq[LSUB "$reference" $target] )
-         or return undef;
-
-    wantarray ? $self->History : $self->Results;
-}
-
-sub subscribed
-{   my ($self, $what) = @_;
-    my $known = $what ? $what.$self->separator($what)."*" : undef;
-
-    my @list = $self->lsub(undef, $known);
-    push @list, $self->lsub(undef, $what) if $what && $self->exists($what);
-
+sub _folders_or_subscribed
+{   my ($self, $method, $what) = @_;
     my @folders;
-    for(my $m = 0; $m < @list; $m++ )
-    {   $list[$m] or next;
 
-        if($list[$m] !~ /$CRLF$/o)
-        {   $list[$m]  .= $list[$m+1];
-            $list[$m+1] = "";
+    # do BLOCK allowing use of "last if LastError" and avoiding dup code
+    do {{
+        my @list;
+        if ($what)
+        {   my $sep = $self->separator($what);
+            last if $self->LastError;
+
+            my $whatsub = $what =~ m/\Q${sep}\E$/ ? "$what*" : "$what$sep*";
+
+            my $tref = $self->$method(undef, $whatsub) or last;
+            shift @$tref;   # remove command
+            push @list, @$tref;
+
+            my $exists = $self->exists($what) or last;
+            if ($exists)
+            {   $tref = $self->$method(undef, $what) or last;
+                shift @$tref;   # remove command
+                push @list, @$tref;
+            }
+        }
+        else
+        {   my $tref = $self->$method(undef, undef) or last;
+            shift @$tref;   # remove command
+            push @list, @$tref;
         }
 
-        # $self->_debug("Subscribed: examining $list[$m]");
+        $self->_list_response_preprocess(\@list);   # necessary? remove?
 
-        push @folders, $1||$2
-            if $list[$m] =~
-                m/ ^ \* \s+ LSUB            # * LSUB
-                     \s+ \( [^\)]* \) \s+   # (Flags)
-                     (?:"[^"]*"|NIL)\s+     # "delimiter" or NIL
-                     (?:"([^"]*)"|(.*))$CRLF$  # Name or "Folder name"
-                 /oix;
-    }
+        foreach my $resp (@list)
+        {   my $rec = $self->_list_response_parse($resp);
+            next unless defined $rec->{name};
+            push @folders, $rec->{name};
+        }
+    }};
 
     my @clean = _remove_doubles @folders;
     wantarray ? @clean : \@clean;
 }
 
+sub folders
+{   my ($self, $what) = @_;
+
+    return wantarray ? @{$self->{Folders}} : $self->{Folders}
+        if !$what && $self->{Folders};
+
+    my @folders = $self->_folders_or_subscribed("list", $what);
+
+    $self->{Folders} = \@folders unless $what;
+    wantarray ? @folders : \@folders;
+}
+
+sub subscribed
+{   my ($self, $what) = @_;
+    $self->_folders_or_subscribed("lsub", $what);
+}
+
+# BUG? cleanup escaping/quoting
 sub deleteacl
 {   my ($self, $target, $user) = @_;
     $target = $self->Massage($target);
@@ -478,6 +506,7 @@ sub deleteacl
     wantarray ? $self->History : $self->Results;
 }
 
+# BUG? cleanup escaping/quoting
 sub setacl
 {   my ($self, $target, $user, $acl) = @_;
     $target ||= $self->Folder;
@@ -495,7 +524,6 @@ sub setacl
 
     wantarray ? $self->History : $self->Results;
 }
-
 
 sub getacl
 {   my ($self, $target) = @_;
@@ -575,17 +603,16 @@ sub message_string
     unless($self->Ignoresizeerrors)
     {   # Check size with expected size
         my $expected_size = $self->size($msg);
-        unless(defined $expected_size)
-        {   $self->LastError( "message_string() cannot get message size,"
-                            . " you may need the IgnoreSizeErrors option");
-            return undef;
-        }
+        return undef if $self->LastError;
 
         # RFC822.SIZE may be wrong.
         # See RFC2683 3.4.5 "RFC822.SIZE"
-        if(length($string) != $expected_size)
-        {   $self->LastError("message_string() "
-              . "expected $expected_size bytes but received ".length($string));
+        if(!$expected_size or length($string) != $expected_size)
+        {   $expected_size ="<undef>" unless defined $expected_size;
+            $self->LastError("message_string() "
+              . "expected $expected_size bytes but received ".length($string)
+              . " you may need the IgnoreSizeErrors option"
+            );
             return undef;
         }
     }
@@ -677,7 +704,7 @@ sub message_uid
     undef;
 }
 
-#???? this code is very clumpsy, and currently probably broken.
+#???? this code is very clumsy, and currently probably broken.
 #  Why not use a pipe???
 #  Is a quadratic slowdown not much simpler and better???
 #  Shouldn't the slowdowns extend over multiple messages?
@@ -713,6 +740,7 @@ sub migrate
     defined $msgs or $msgs = "ALL";
     $msgs = $self->search("ALL")
         if uc $msgs eq 'ALL';
+    return undef if $self->LastError;
 
     my $range = $self->Range($msgs);
     my $clear = $self->Clear;
@@ -724,9 +752,12 @@ sub migrate
         $self->_debug("Migrating message $mid in folder $folder");
 
         my $leftSoFar = my $size = $self->size($mid);
+        return undef if $self->LastError;
 
         # fetch internaldate and flags of original message:
         my $intDate = $self->internaldate($mid);
+        return undef if $self->LastError;
+
         my @flags   = grep !/\\Recent/i, $self->flags($mid);
         my $flags   = join ' ', $peer->supported_flags(@flags);
 
@@ -886,8 +917,8 @@ sub migrate
                     }
 
                     if($! == EPIPE or $! == ECONNRESET)
-                    {   $self->LastError("Write failed '$!'");
-                        $self->State(Unconnected);
+                    {   $self->State(Unconnected);
+                        $self->LastError("Write failed '$!'");
                         return undef;
                     }
 
@@ -940,8 +971,8 @@ sub migrate
             until($wroteSoFar >= 2) {
                 $wroteSoFar += syswrite($toSock,$fromBuffer,2-$wroteSoFar,$wroteSoFar)||0;
                 if($! == EPIPE or $! == ECONNRESET)
-                {   $self->LastError("Write failed '$!'");
-                    $self->State(Unconnected);
+                {   $self->State(Unconnected);
+                    $self->LastError("Write failed '$!'");
                     return undef;
                 }
             }
@@ -1016,6 +1047,7 @@ sub _optimal_sleep($$$)
 sub body_string
 {   my ($self, $msg) = @_;
     my $ref = $self->fetch($msg, "BODY" .($self->Peek ? ".PEEK" : "")."[TEXT]");
+    return undef if $self->LastError;
 
     my $string = join '', map {$_->[DATA]}
         grep {$self->_is_literal($_)} @$ref;
@@ -1103,16 +1135,59 @@ sub done
 
 sub tag_and_run
 {   my ($self, $string, $good) = @_;
-    $self->_imap_command($string, $good);
+    $self->_imap_command($string, $good)
+      or return undef;
     @{$self->Results};  #??? enforce list context
 }
 
+sub reconnect {
+    my $self = shift;
 
-# _imap_command runs a command, inserting the correct tag and <CR><LF> and whatnot.
-# When updating _imap_command, remember to examine the run() method too, since
-# it is very similar.
+    return $self if $self->IsConnected;
 
+    # if string is long try reduce to a more reasonable size
+    my $einfo = $self->LastError || "";
+    #$self->_debug("reconnecting to ", $self->Server, ", last error: $einfo");
+    warn("reconnecting to ", $self->Server, ", last error: $einfo\n");
+
+    # reset error
+    $self->LastError(undef);
+
+    # reconnect and select appropriate folder
+    unless($self->connect)
+    {   $self->LastError($einfo . ", reconnect error: " . $self->LastError);
+        return undef;
+    }
+    if($self->Folder and ! $self->select($self->Folder))
+    {   $self->LastError($einfo . ", reconnect error: " . $self->LastError);
+        return undef;
+    }
+    return $self;
+}
+
+# wrapper for _imap_command_do to enable retrying on lost connections
 sub _imap_command
+{   my $self  = shift;
+    my $retry = $self->Reconnectretry || 0;
+    my $tries = 0;
+
+    my $rc;
+    while( $tries++ <= $retry )
+    {   $rc = $self->_imap_command_do(@_);
+        if (!defined($rc) and $retry and $self->IsUnconnected)
+        {   ($! == EPIPE or $! == ECONNRESET) ? $self->reconnect : last;
+        }
+        else
+        {   last;
+        }
+    }
+    return $rc;
+}
+
+# _imap_command_do runs a command, inserting the correct tag and <CR><LF>
+# and whatnot.  When updating _imap_command, remember to examine the
+# run() method too, since it is very similar.
+sub _imap_command_do
 {   my $self   = shift;
     my $string = shift or return undef;
     my $good   = shift || 'GOOD';
@@ -1182,7 +1257,10 @@ sub run
     my $count  = $self->Count($self->Count+1);
     my $tag    = $string =~ /^(\S+) / ? $1 : undef;
 
-    $tag or $self->LastError("Invalid string passed to run method; no tag found.");
+    unless($tag)
+    {   $self->LastError("Invalid string passed to run method; no tag found.");
+        return undef;
+    }
 
     my $clear  = $self->Clear;
     $self->Clear($clear)
@@ -1435,20 +1513,20 @@ sub _read_line
                 while($expected_size > length $litstring)
                 {   if($timeout)
                     {   my $rc = _read_more($socket, $timeout);
-             		unless($rc > 0)
-             		{   my $msg = ( $rc ? "error" : "timeout" )
-             		      . " waiting ${timeout}s for literal data from server"
-             		      . ( $! ? ": $!" : "" );
-             		    $self->LastError($msg);
-             		    $self->_record($transno,
-             		       [ $self->_next_index($transno), "ERROR"
-             		       , "$transno * NO $msg"]);
+                        unless($rc > 0)
+                        {   my $msg = ( $rc ? "error" : "timeout" )
+                              . " waiting ${timeout}s for literal data from server"
+                              . ( $! ? ": $!" : "" );
+                            $self->LastError($msg);
+                            $self->_record($transno,
+                               [ $self->_next_index($transno), "ERROR"
+                               , "$transno * NO $msg"]);
                             $self->_disconnect; # BUG: can not handle timeouts
-             		    return undef;
+                            return undef;
                         }
                     }
-                    else # 1 ms before retry
-                    {   CORE::select(undef, undef, undef, 0.001);
+                    else # 25 ms before retry
+                    {   CORE::select(undef, undef, undef, 0.025);
                     }
 
                     my $ret = $self->_sysread($socket, \$litstring
@@ -1465,19 +1543,20 @@ sub _read_line
                         $self->State(Unconnected);
                     }
 
+                    $self->_debug("Received ret=$ret " . length($litstring)
+                      . " of $expected_size");
+
                     # save errors and return
                     if($emsg)
                     {   $self->LastError($emsg);
                         $self->_record($transno,
                            [$self->_next_index($transno), "ERROR"
                            , "$transno * NO $emsg"]);
+                        $litstring = "" unless defined $litstring;
+                        $self->_debug("ERROR while processing LITERAL, "
+                          . " buffer=\n" . $litstring . "<END>\n");
                         return undef;
                     }
-
-                    #$self->_debug("Received ret=$ret and buffer = " .
-                    #   "\n$litstring<END>\nwhile processing LITERAL");
-                    $self->_debug("Received ret=$ret " . length($litstring)
-                      . " of $expected_size");
                 }
             }
 
@@ -1607,51 +1686,33 @@ sub _list_response_parse
 
     $resp =~ s/\015?\012$//;
     if ( $resp =~
-         / ^\* \s+ LIST \s+ \(([^\)]*)\) \s+  # * LIST (Flags)
+         / ^\* \s+ LIST \s+ \(([^\)]*)\) \s+  # * LIST (attrs)
            (?:\" ([^"]*) \" | NIL  )     \s+  # "delimiter" or NIL
            (?:\" (.*)    \" | (\S+))          # "name" or name
          /ix )
     {
-        @info{ qw(flags delim name) } =
+        @info{ qw(attrs delim name) } =
           ( [ split(/ /, $1) ], $2, defined($3) ? $self->Unescape($3) : $4 );
     }
     return wantarray ? %info : \%info;
 }
 
-sub folders($)
-{   my ($self, $what) = @_;
+# BUG? Legacy code does this for subscribed() and folders(). Is there
+# a case where lines returned by the server do not end in $CRLF and we
+# need to treat them as a continuation of the previous line?
+sub _list_response_preprocess
+{   my ($self, $data) = @_;
+    return undef unless defined $data;
 
-    return wantarray ? @{$self->{Folders}} : $self->{Folders}
-        if !$what && $self->{Folders};
-
-    my @list;
-    if($what)
-    {   my $sep = $self->separator($what);
-        my $whatsub = $what =~ m/\Q${sep}\E$/ ? "$what*" : "$what$sep*";
-        push @list, $self->list(undef, $whatsub);
-        push @list, $self->list(undef, $what) if $self->exists($what);
-    }
-    else
-    {   push @list, $self->list(undef, undef);
-    }
-
-    my @folders;
-    for(my $m = 0; $m < @list; $m++ )
-    {   if($list[$m] && $list[$m] !~ /$CRLF$/o )
-        {   $self->_debug("folders: concatenating $list[$m] and $list[$m+1]");
-            $list[$m] .= $list[$m+1];
-            splice @list, $m+1, 1;
+    for(my $m = 0; $m < @$data; $m++ )
+    {   if($data->[$m] && $data->[$m] !~ /$CRLF$/o )
+        {   local($!);   # old versions of Carp could reset $!
+            carp("concatenating $data->[$m] and $data->[$m+1]");
+            $data->[$m] .= $data->[$m+1];
+            splice @$data, $m+1, 1;
         }
-
-        my $rec = $self->_list_response_parse($list[$m]);
-        next unless defined $rec->{name};
-        push @folders, $rec->{name};;
-   }
-
-    my @clean = _remove_doubles @folders;
-    $self->{Folders} = \@clean unless $what;
-
-    wantarray ? @clean : \@clean;
+    }
+    return $data
 }
 
 sub exists
@@ -1668,6 +1729,8 @@ sub get_bodystructure
     }
 
     my @out = $self->fetch($msg, "BODYSTRUCTURE");
+    return undef if $self->LastError;
+
     my $bs = "";
     my $output = first { /BODYSTRUCTURE\s+\(/i } @out;    # Wee! ;-)
     if($output =~ /$CRLF$/o)
@@ -1709,6 +1772,8 @@ sub get_envelope
     }
 
     my @out = $self->fetch($msg, 'ENVELOPE');
+    return undef if $self->LastError;
+
     my $bs = "";
     my $output = first { /ENVELOPE \(/i } @out;    # vi ;-)
 
@@ -1801,10 +1866,10 @@ sub _split_sequence {
         #   tag, command, fetch-att + $CRLF
         push @args, $self->Transaction, $self->Uid ? "UID" : (), "\015\012";
 
-        # do not split on anything smaller than 10 (length 2**32)
+        # do not split on anything smaller than 64 chars
         my $clen = length join(" ", @att, @args);
         my $diff = $maxl - $clen;
-        my $most = $diff > 10 ? $diff : 10;
+        my $most = $diff > 64 ? $diff : 64;
 
         @seqs = ( $seq =~ m/(.{1,$most})(?:,|$)/g );
         $self->_debug("split_sequence: length($maxl-$clen) parts: ", $#seqs+1)
@@ -1897,7 +1962,7 @@ sub _imap_folder_command($$@)
 
     wantarray ? $self->History : $self->Results;
 }
-    
+
 sub subscribe($)   { $_[0]->_imap_folder_command(SUBSCRIBE   => $_[1]) }
 sub unsubscribe($) { $_[0]->_imap_folder_command(UNSUBSCRIBE => $_[1]) }
 sub delete($)      { $_[0]->_imap_folder_command(DELETE      => $_[1]) }
@@ -1923,9 +1988,9 @@ sub expunge
             or return undef;
     }
     else
-    {   $self->select($folder);
+    {   $self->select($folder) or return undef;
         my $succ = $self->_imap_command('EXPUNGE');
-        $self->select($old);
+        $self->select($old) or return undef;   # BUG? this should be fatal?
         $succ or return undef;
     }
 
@@ -1953,6 +2018,7 @@ sub uidexpunge
     wantarray ? $self->History : $self->Results;
 }
 
+# BUG? cleanup escaping/quoting
 sub rename
 {   my ($self, $from, $to) = @_;
 
@@ -2253,6 +2319,8 @@ sub search
 my $thread_parser;
 sub thread
 {   my $self      = shift;
+
+    # BUG? check return from has_capability?
     my $algorythm = shift ||
      ( $self->has_capability("THREAD=REFERENCES")
      ? 'REFERENCES'
@@ -2300,28 +2368,30 @@ sub delete_message
 
       $self->store(join(',', @msgs), '+FLAGS.SILENT','(\Deleted)')
     ? scalar @msgs
-    : 0
+    : undef;
 }
 
 sub restore_message
 {   my $self = shift;
     my $msgs = join ',', map {ref $_ eq 'ARRAY' ? @$_ : split /\,/} @_;
 
-    $self->store($msgs,'-FLAGS','(\Deleted)');
+    $self->store($msgs,'-FLAGS','(\Deleted)') or return undef;
     scalar grep /^\*\s\d+\sFETCH\s\(.*FLAGS.*(?!\\Deleted)/, $self->Results;
 }
 
 #??? compare to uidnext.  Why is Massage missing?
 sub uidvalidity
 {   my ($self, $folder) = @_;
-    my $vline = first { /UIDVALIDITY/i } $self->status($folder, "UIDVALIDITY");
+    $self->status($folder, "UIDVALIDITY") or return undef;
+    my $vline = first { /UIDVALIDITY/i } $self->History;
     defined $vline && $vline =~ /\(UIDVALIDITY\s+([^\)]+)/ ? $1 : undef;
 }
 
 sub uidnext
 {   my $self   = shift;
     my $folder = $self->Massage(shift);
-    my $line   = first { /UIDNEXT/i } $self->status($folder, "UIDNEXT");
+    $self->status($folder, "UIDNEXT") or return undef;
+    my $line   = first { /UIDNEXT/i } $self->History;
     defined $line && $line =~ /\(UIDNEXT\s+([^\)]+)/ ? $1 : undef;
 }
 
@@ -2332,7 +2402,7 @@ sub capability
     {   my @caps = keys %{$self->{CAPABILITY}};
         return wantarray ? @caps : \@caps;
     }
-     
+
     $self->_imap_command('CAPABILITY')
         or return undef;
 
@@ -2418,44 +2488,33 @@ sub internaldate
 
 sub is_parent
 {   my ($self, $folder) = (shift, shift);
-    my $list = $self->list(undef, $folder) or return 0;
-    my $line;
+    my $list = $self->list(undef, $folder) or return undef;
 
-    for(my $m = 0; $m < @$list; $m++)
-    {   return 0
-           if $list->[$m] =~ /\bNoInferior\b/i;
+    shift @$list;   # remove command
+    $self->_list_response_preprocess($list);   # necessary? remove?
 
-        if($list->[$m]  =~ s/(\{\d+\})$CRLF$//o )
-        {   $list->[$m] .= $list->[$m+1];
-            splice @$list, $m+1, 1;
-        }
-
-        $line = $list->[$m]
-            if $list->[$m] =~
-                /^ \* \s+ LIST       \s+   # * LIST
-                   \([^\)]*\)        \s+   # (Flags)
-                   \"[^"]*\"         \s+   # "delimiter"
-                   (?:\"[^"]*\"|\S+) \s*$  # Name or "Folder name"
-                /x;
+    my $attrs;
+    foreach my $resp (@$list)
+    {   my $rec = $self->_list_response_parse($resp);
+        next unless defined $rec->{attrs};
+        return 0 if $rec->{attrs} =~ /\bNoInferior\b/i;
+        $attrs = $rec->{attrs};
     }
 
-    unless(length $line)
-    {   $self->_debug("Warning: separator method found no correct o/p in:\n\t".
-            join "\n\t", @$list);
-        return 0;
+    if($attrs)
+    {
+        return 1 if $attrs =~ /HasChildren/i;
+        return 0 if $attrs =~ /HasNoChildren/i;
+    }
+    else
+    {   $self->_debug( join("\n\t", "no attrs for '$folder' in:", @$list) );
     }
 
-    $line =~ /^\*\s+LIST\s+ \( ([^\)]*) \s*\)/x
-        or return 0;
-
-    my $flags = $1;
-
-    return 1 if $flags =~ /HasChildren/i;
-    return 0 if $flags =~ /HasNoChildren/i;
-    return 0 if $flags =~ /\\/;  # other flags found
-
-    # flag not supported, try via folders()
+    # BUG? This may be overkill for normal use cases...
+    # flag not supported or not returned for some reason, try via folders()
     my $sep  = $self->separator($folder) || $self->separator(undef);
+    return undef if $self->LastError;
+
     my $lead = $folder . $sep;
     my $len  = length $lead;
     scalar grep {$lead eq substr($_, 0, $len)} $self->folders;
@@ -2788,7 +2847,6 @@ sub authenticate
         }
     }
 
-
     $code eq 'OK'
         or return undef;
 
@@ -2836,8 +2894,10 @@ sub move
     my $uids = $self->copy($target, map {ref $_ eq 'ARRAY' ? @$_ : $_} @msgs)
         or return undef;
 
-    $self->delete_message(@msgs)
-        or carp $self->LastError;
+    unless ($self->delete_message(@msgs))
+    {   local($!);   # old versions of Carp could reset $!
+        carp $self->LastError;
+    }
 
     $uids;
 }
@@ -2886,17 +2946,14 @@ sub deny_seeing
     $self->unset_flag('\\Seen', @msgs);
 }
 
-# BUG?: consider changing @data to $data and fixing checks...
 sub size
 {   my ($self, $msg) = @_;
-    my @data = $self->fetch($msg, "(RFC822.SIZE)");
-    return undef if ( ! defined $data[0] or $self->LastError );
+    my $data = $self->fetch($msg, "(RFC822.SIZE)") or return undef;
 
-    my $size = first { /RFC822\.SIZE/ } @data;
-
-    $size = ( $size =~ /RFC822\.SIZE\s+(\d+)/ ) ? $1 : undef
-      if (defined $size);
-    return $size;
+    foreach my $line (@$data)
+    {   return $1 if ( $line =~ /RFC822\.SIZE\s+(\d+)/ );
+    }
+    return undef;
 }
 
 sub getquotaroot
@@ -2953,9 +3010,15 @@ sub Massage($;$)
 {   my ($self, $name, $notFolder) = @_;
     $name =~ s/^\"(.*)\"$/$1/ unless $notFolder;
 
-      $name =~ /["\\]/    ? "{".length($name)."}$CRLF$name"
-    : $name =~ /[(){}\s[:cntrl:]%*\[\]]/ ? qq["$name"]
-    :                       $name;
+    if ( $name =~ /["\\]/ )
+    {   return "{" . length($name) . "}" . $CRLF . $name;
+    }
+    elsif ( $name =~ /[(){}\s[:cntrl:]%*\[\]]/ )
+    {   return qq("$name");
+    }
+    else
+    {   return $name;
+    }
 }
 
 sub unseen_count
