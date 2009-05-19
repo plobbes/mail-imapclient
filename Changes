@@ -4,6 +4,21 @@ Changes from 3.17_01+ to ?       made by Phil Lobbes
 Changes from 2.99_01  to 3.16    made by Mark Overmeer
 Changes from 0.09     to 2.99_01 made by David Kernen
 
+version 3.17_05: Tue May 19 11:04:28 EDT 2009
+	- version 3.17_05
+	- *reset LastError for every call to _imap_command_do()
+	- *run() - use _imap_command_do(), return arrayref in scalar context
+	- *tag_and_run() - return arrayref in scalar context
+	- *done() - use _imap_command_do(), return arrayref in scalar context
+	- *search() now returns empty arrayref not undef if no matches found
+	- _imap_command_do() made more flexible to avoid code duplication
+	- _list_response_parse renamed _list_or_lsub_response_parse
+	- updated POD with new/updated behavior
+	- append_string() now uses _imap_command_do() for Reconnectretry
+	- internally use defined return values instead of only LastError()
+	- run() updated to use same/similar code to _imap_command_do()
+	- make several return statements more consistent
+
 version 3.17_04: Fri May 15 17:18:52 EDT 2009
 	- version 3.17_04
 	- updated POD with new reconnect() method and Reconnectretry attr
