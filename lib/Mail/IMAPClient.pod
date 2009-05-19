@@ -256,21 +256,25 @@ If you attempt an operation that results in an error, then you can
 retrieve the text of the error message by using the L</LastError>
 method.  However, the L</LastError> method is an object method (not a
 class method) and can only be used once an object is successfully
-created.  Errors in the L</new> method can prevent your object from
-ever being created.
+created.  In cases where an object is not successfully created the
+C<$@> variable is set with an error message.
 
-If the L</Server>, L</User>, and L</Password> parameters are supplied
-to L</new>, it will attempt to call L</connect> and L</login>.  Any of
-these methods could fail and cause the L</new> method call to return
-C<undef> (in which case an object will have been created but its will
-have been discarded before being returned to the caller).
+Mail::IMAPClient resets C<$@> and L</LastError> to undef before most
+IMAP requests, so the values only have a short lifespan.
+L</LastError> will always contain error info from the last error,
+until another error is encountered, another IMAP command is issued or
+it is explicitly cleared.
 
-In this case C<$@> can be checked for errors.  Mail::IMAPClient will
-populate that variable with something useful if either of the L</new>,
-L</connect>, or L</login> methods fail.  In fact, the C<$@> variable
-will always contain error info from the last error, so you can print
-that instead of calling L</LastError> although this may be subject to
-change in a future version of Mail::IMAPClient.
+Please note that the use of C<$@> is subject to change in the future
+release so it is best to use L</LastError> for error checking once a
+Mail::IMAPClient object has been created.
+
+Errors in the L</new> method can prevent your object from ever being
+created.  If the L</Server>, L</User>, and L</Password> parameters are
+supplied to L</new>, it will attempt to call L</connect> and
+L</login>.  Any of these methods could fail and cause the L</new>
+method call to return C<undef> and leaving the variable C<$@> is set
+to an error message.
 
 =head2 Transactions
 
@@ -1006,28 +1010,27 @@ for L</logout>.)
 
 Example:
 
-  my $idle = $imap->idle or warn "Couldn't idle: $@\n";
-  &goDoOtherThings;
-  $imap->done($idle) or warn "Error from done: $@\n";
+  my $tag = $imap->idle or warn "Couldn't idle: $@\n";
+  goDoOtherThings();
+  $imap->done($tag) or warn "Error from done: $@\n";
 
 The B<done> method tells the IMAP server that the connection is
 finished idling.  See L</idle> for more information.  It accepts one
-argument, which is the transaction number you received from the
-previous call to L</idle>.
+argument, which is the I<tag> (identifier) received from the previous
+call to L</idle>.  If no I<tag> is specified when calling B<done> then
+the default I<tag> using an internal B<Count> attribute is assumed to
+be the I<tag> to use.
 
-If you pass the wrong transaction number to B<done> then your Perl
-program will probably hang.  If you don't pass any transaction number
-to B<done> then it will try to guess, and if it guesses wrong it will
-hang.
+If an invalid I<tag> is specified, or the default I<tag> is wrong,
+then B<done> will hang indefinitely or until a timeout occurs.
 
-If you call done without previously having called L</idle> then your
-server will mysteriously respond with I<* BAD Invalid tag>.
+If you call done without previously having called L</idle> then the
+server will likely respond with I<* BAD Invalid tag>.
 
 If you try to run any other mailbox method after calling L</idle> but
 before calling L</done>, then that method will not only fail but also
-take you out of the IDLE state.  This means that when you eventually
-remember to call B<done> you will just get that I<* BAD Invalid tag>
-thing again.
+take you out of the IDLE state.  In this case, a subsequent call to
+B<done> would result in an error.
 
 =head2 examine
 
@@ -2066,8 +2069,9 @@ The B<run> method excepts one or two arguments.  The first argument is
 a string containing an IMAP Client command, including a tag and all
 required arguments.  The optional second argument is a string to look
 for that will indicate success.  (The default is C</OK.*/>).  The
-B<run> method returns an array of output lines from the command, which
-you are free to parse as you see fit.
+B<run> method returns an array (or arrayref in scalar context) of
+output lines from the command, which you are free to parse as you see
+fit.
 
 The B<run> method does not do any syntax checking, other than
 rudimentary checking for a tag.
@@ -2081,18 +2085,23 @@ you may risk overwriting a previous transaction's entry in the History
 buffer.
 
 If you want the control of B<run> but you don't want to worry about
-the damn tags then see L</"tag_and_run">, below.
+tags then see L</"tag_and_run">, below.
 
 =head2 search
 
 Example:
 
-  my @msgs1 = $imap->search(@args) or warn "search: None found\n";
-  warn "Error in search: $@\n" if $@;
+  my $msgs1 = $imap->search(@args);
+  if ($msgs) {
+      print "search matches: @$msgs1";
+  }
+  else {
+      warn "Error in search: $@\n" if $@;
+  }
+
   # or
-  my @msgs2 = $imap->search( \( $imap->Quote($msgid), "FROM", q{"me"} ) )
-    or warn "search: None found\n";
-  warn "Error in search: $@\n" if $@;
+  my $msgs2 = $imap->search( \( $imap->Quote($msgid), "FROM", q{"me"} ) )
+    or warn "search failed: $@\n";
 
 The B<search> method implements the SEARCH IMAP client command.  Any
 arguments supplied to B<search> are prefixed with a space then
@@ -2471,7 +2480,7 @@ B<subscribed> method.
 
 Example:
 
-  my @output = $imap->tag_and_run(@args)
+  my $output = $imap->tag_and_run(@args)
     or die "Could not tag_and_run: $@\n";
 
 The B<tag_and_run> method accepts one or two arguments.  The first
