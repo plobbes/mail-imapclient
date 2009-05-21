@@ -164,7 +164,7 @@ sub Strip_cr
         return $string;
     }
 
-    wantarray
+    return wantarray
     ?   map { s/$CRLF/\n/ogm; $_ } (ref $_[0] ? @{$_[0]} : @_)
     : [ map { s/$CRLF/\n/ogm; $_ } (ref $_[0] ? @{$_[0]} : @_) ];
 }
@@ -412,7 +412,7 @@ sub sort
             push @hits, grep /\d/, split;
         }
     }
-    wantarray ? @hits : \@hits;
+    return wantarray ? @hits : \@hits;
 }
 
 sub _list_or_lsub
@@ -427,7 +427,7 @@ sub _list_or_lsub
     $self->_imap_command( qq($cmd "$reference" $target) )
         or return undef;
 
-    wantarray ? $self->History : $self->Results;
+    return wantarray ? $self->History : $self->Results;
 }
 
 sub list { shift->_list_or_lsub( "LIST", @_ ) }
@@ -473,7 +473,7 @@ sub _folders_or_subscribed
     }};
 
     my @clean = _remove_doubles @folders;
-    wantarray ? @clean : \@clean;
+    return wantarray ? @clean : \@clean;
 }
 
 sub folders
@@ -485,7 +485,7 @@ sub folders
     my @folders = $self->_folders_or_subscribed("list", $what);
 
     $self->{Folders} = \@folders unless $what;
-    wantarray ? @folders : \@folders;
+    return wantarray ? @folders : \@folders;
 }
 
 sub subscribed
@@ -503,7 +503,7 @@ sub deleteacl
     $self->_imap_command( qq[DELETEACL $target "$user"] )
         or return undef;
 
-    wantarray ? $self->History : $self->Results;
+    return wantarray ? $self->History : $self->Results;
 }
 
 # BUG? cleanup escaping/quoting
@@ -522,7 +522,7 @@ sub setacl
     $self->_imap_command( qq[SETACL $target "$user" "$acl"] )
         or return undef;
 
-    wantarray ? $self->History : $self->Results;
+    return wantarray ? $self->History : $self->Results;
 }
 
 sub getacl
@@ -571,7 +571,7 @@ sub listrights
     my @rights = split /\s/, $resp;
     my $rights = join '', @rights[4..$#rights];
     $rights    =~ s/"//g;
-    wantarray ? split(//, $rights) : $rights;
+    return wantarray ? split(//, $rights) : $rights;
 }
 
 sub select
@@ -1585,13 +1585,13 @@ sub LastIMAPCommand(;$)
 sub History(;$)
 {   my ($self, $trans) = @_;
     my ($cmd, @a) = $self->_trans_data($trans);
-    wantarray ? @a : \@a;
+    return wantarray ? @a : \@a;
 }
 
 sub Results(;$)
 {   my ($self, $trans) = @_;
     my @a = $self->_trans_data($trans);
-    wantarray ? @a : \@a;
+    return wantarray ? @a : \@a;
 }
 
 # Don't know what it does, but used a few times.
@@ -1614,7 +1614,7 @@ sub Escaped_results
     }
 
     shift @a;    # remove cmd
-    wantarray ? @a : \@a;
+    return wantarray ? @a : \@a;
 }
 
 sub Unescape
@@ -1808,7 +1808,7 @@ sub fetch
     }
 
     #wantarray ? $self->History : $self->Results;
-    wantarray ? @data : \@data;
+    return wantarray ? @data : \@data;
 }
 
 # Some servers have a maximum command length.  If Maxcommandlength is
@@ -1904,7 +1904,7 @@ sub fetch_hash
             }
         }
     }
-    wantarray ? %$uids : $uids;
+    return wantarray ? %$uids : $uids;
 }
 
 sub store
@@ -1912,7 +1912,7 @@ sub store
     delete $self->{Folders};
     $self->_imap_uid_command(STORE => @a)
         or return undef;
-    wantarray ? $self->History : $self->Results;
+    return wantarray ? $self->History : $self->Results;
 }
 
 sub _imap_folder_command($$@)
@@ -1923,13 +1923,18 @@ sub _imap_folder_command($$@)
     $self->_imap_command(join ' ', $command, $folder, @_)
         or return undef;
 
-    wantarray ? $self->History : $self->Results;
+    return wantarray ? $self->History : $self->Results;
 }
 
-sub subscribe($)   { $_[0]->_imap_folder_command(SUBSCRIBE   => $_[1]) }
-sub unsubscribe($) { $_[0]->_imap_folder_command(UNSUBSCRIBE => $_[1]) }
-sub delete($)      { $_[0]->_imap_folder_command(DELETE      => $_[1]) }
-sub create($)      { my $self=shift; $self->_imap_folder_command(CREATE => @_)}
+sub subscribe($)   { shift->_imap_folder_command(SUBSCRIBE   => @_) }
+sub unsubscribe($) { shift->_imap_folder_command(UNSUBSCRIBE => @_) }
+sub create($)      { shift->_imap_folder_command(CREATE      => @_) }
+sub delete($)
+{   my $self = shift;
+    $self->_imap_folder_command(DELETE => @_) or return undef;
+    $self->Folder(undef);
+    return wantarray ? $self->History : $self->Results;
+}
 
 # rfc2086
 sub myrights($)    { $_[0]->_imap_folder_command(MYRIGHTS    => $_[1]) }
@@ -1939,7 +1944,7 @@ sub close
     delete $self->{Folders};
     $self->_imap_command('CLOSE')
         or return undef;
-    wantarray ? $self->History : $self->Results;
+    return wantarray ? $self->History : $self->Results;
 }
 
 sub expunge
@@ -1957,7 +1962,7 @@ sub expunge
         $succ or return undef;
     }
 
-    wantarray ? $self->History : $self->Results;
+    return wantarray ? $self->History : $self->Results;
 }
 
 sub uidexpunge
@@ -1978,7 +1983,7 @@ sub uidexpunge
         return undef;
     }
 
-    wantarray ? $self->History : $self->Results;
+    return wantarray ? $self->History : $self->Results;
 }
 
 # BUG? cleanup escaping/quoting
@@ -2008,7 +2013,7 @@ sub status
     $self->_imap_command("STATUS $box ($which)")
         or return undef;
 
-    wantarray ? $self->History : $self->Results;
+    return wantarray ? $self->History : $self->Results;
 }
 
 sub flags
@@ -2049,7 +2054,7 @@ sub flags
 
     # or did the guy want just one response? Return it if so
     my $flagsref = $flagset->{$msgspec};
-    wantarray ? @$flagsref : $flagsref;
+    return wantarray ? @$flagsref : $flagsref;
 }
 
 # reduce a list, stripping undeclared flags. Flags with or without
@@ -2202,7 +2207,7 @@ sub _search_date($$$)
         push @hits, grep /\d/, split;
     }
     $self->_debug("Hits are: @hits");
-    wantarray ? @hits : \@hits;
+    return wantarray ? @hits : \@hits;
 }
 
 sub or
@@ -2229,7 +2234,7 @@ sub or
     }
     $self->_debug("Hits are now: @hits");
 
-    wantarray ? @hits : \@hits;
+    return wantarray ? @hits : \@hits;
 }
 
 sub disconnect { shift->logout }
@@ -2271,10 +2276,10 @@ sub search
         or $self->_debug("Search successful but found no matching messages");
 
     # return empty list
-      wantarray     ? @hits
-    : !@hits        ? \@hits
-    : $self->Ranges ? $self->Range(\@hits)
-    :                 \@hits;
+    return wantarray ? @hits
+    : !@hits         ? \@hits
+    : $self->Ranges  ? $self->Range(\@hits)
+    :                  \@hits;
 }
 
 # returns a Thread data structure
@@ -2374,7 +2379,7 @@ sub capability
         $self->{uc $1} = uc $2 if /(.*?)\=(.*)/;
     }
 
-    wantarray ? @caps : \@caps;
+    return wantarray ? @caps : \@caps;
 }
 
 sub has_capability
@@ -2435,7 +2440,7 @@ sub namespace {
         push @ns, [ map { [ m#"([^"]*)"\s*#g ] } @pieces ]; 
     }
 
-    wantarray ? @ns : \@ns;
+    return wantarray ? @ns : \@ns;
 }
 
 sub internaldate
