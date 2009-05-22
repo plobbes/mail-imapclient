@@ -82,7 +82,7 @@ sub LastError {
 
     # allow LastError to be reset with undef
     if ( defined $err ) {
-        $err =~ s/$CRLF$//o;
+        $err =~ s/$CRLF$//og;
         local ($!);    # old versions of Carp could reset $!
         $self->_debug( Carp::longmess("ERROR: $err") );
     }
@@ -175,10 +175,9 @@ sub Strip_cr {
         return $string;
     }
 
-    return
-      wantarray
-      ? map { s/$CRLF/\n/ogm; $_ } ( ref $_[0] ? @{ $_[0] } : @_ )
-      : [ map { s/$CRLF/\n/ogm; $_ } ( ref $_[0] ? @{ $_[0] } : @_ ) ];
+    return wantarray
+      ? map { s/$CRLF/\n/og; $_ } ( ref $_[0] ? @{ $_[0] } : @_ )
+      : [ map { s/$CRLF/\n/og; $_ } ( ref $_[0] ? @{ $_[0] } : @_ ) ];
 }
 
 # The following defines a special method to deal with the Clear parameter:
@@ -323,25 +322,14 @@ sub Socket($) {
 
     setsockopt( $sock, SOL_SOCKET, SO_KEEPALIVE, 1 ) if $self->Keepalive;
 
-    my $code;
-  LINE:
-    while ( my $output = $self->_read_line ) {
-        foreach my $o (@$output) {
-            $self->_record( $self->Count, $o );
-            next unless $o->[TYPE] eq "OUTPUT";
-
-            $code = $o->[DATA] =~ /^\*\s+(OK|BAD|NO|PREAUTH)/i ? uc($1) : undef;
-            last LINE;
-        }
-    }
-    $code or return undef;    # LastError may be set by _read_line
+    # LastError may be set by _read_line via _get_response
+    my $code = $self->_get_response( '*', 'PREAUTH' ) or return undef;
 
     if ( $code eq 'BYE' || $code eq 'NO' ) {
         $self->State(Unconnected);
         return undef;
     }
-
-    if ( $code eq 'PREAUTH' ) {
+    elsif ( $code eq 'PREAUTH' ) {
         $self->State(Authenticated);
         return $self;
     }
@@ -423,7 +411,7 @@ sub sort {
         my @results = $self->History;
         foreach (@results) {
             chomp;
-            s/\r$//;
+            s/$CR$//;
             s/^\*\s+SORT\s+// or next;
             push @hits, grep /\d/, split;
         }
@@ -691,26 +679,9 @@ sub message_to_file {
         return undef;
     }
 
-    my $code;
+    my $code = $self->_get_response($trans) or return undef;
 
-  READ:
-    until ($code) {
-        my $output = $self->_read_line($handle)
-          or return undef;
-
-        foreach my $o (@$output) {
-            $self->_record( $trans, $o );
-            next unless $self->_is_output($o);
-
-            $code = $o->[DATA] =~ /^$trans\s+(OK|BAD|NO)/mi ? $1 : undef;
-            if ( $o->[DATA] =~ /^\*\s+BYE/im ) {
-                $self->State(Unconnected);
-                return undef;
-            }
-        }
-    }
-    ref $fh or close $handle;
-    $code =~ /^OK/im ? $self : undef;
+    return $code eq "OK" ? $self : undef;
 }
 
 sub message_uid {
@@ -718,7 +689,7 @@ sub message_uid {
 
     my $ref = $self->fetch( $msg, "UID" ) or return undef;
     foreach (@$ref) {
-        return $1 if m/\(UID\s+(\d+)\s*\)\r?$/;
+        return $1 if m/\(UID\s+(\d+)\s*\)$CR?$/o;
     }
     return undef;
 }
@@ -886,7 +857,7 @@ sub migrate {
           if $self->Count >= $clear && $clear > 0;
 
         # position will tell us how far from beginning of msg the
-        # next IMAP FETCH should start (1st time start at offet zero):
+        # next IMAP FETCH should start (1st time start at offset zero):
         my $position   = 0;
         my $chunkCount = 0;
         my $readSoFar  = 0;
@@ -986,63 +957,29 @@ sub migrate {
 
         # Finish up reading the server response from the fetch cmd
         #     on the source system:
+        $self->_debug("Reading from source: expecting 'OK' response");
+        $code = $self->_get_response($trans) or return undef;
 
-        undef $code;
-        until ($code) {
-            $self->_debug(
-                "Reading from source server; expecting ') OK' type response");
-            my $output = $self->_read_line or return undef;
-            foreach my $o (@$output) {
-                $self->_record( $trans, $o );
-                $self->_is_output($o) or next;
-
-                $code = $o->[DATA] =~ /^$trans (OK|BAD|NO)/mi ? $1 : undef;
-                if ( $o->[DATA] =~ /^\*\s+BYE/im ) {
-                    $self->State(Unconnected);
-                    return undef;
-                }
-            }
-        }
-
-        # Now let's send a <CR><LF> to the peer to signal end of APPEND cmd:
-        {
-            my $wroteSoFar = 0;
-            my $fromBuffer = $CRLF;
-            until ( $wroteSoFar >= 2 ) {
-                $wroteSoFar +=
-                  syswrite( $toSock, $fromBuffer, 2 - $wroteSoFar, $wroteSoFar )
-                  || 0;
-                if ( $! == EPIPE or $! == ECONNRESET ) {
-                    $self->State(Unconnected);
-                    $self->LastError("Write failed '$!'");
-                    return undef;
-                }
-            }
+        # Now let's send a CRLF to the peer to signal end of APPEND cmd:
+        unless ( $peer->_send_bytes( \$CRLF ) ) {
+            $self->LastError( "Error appending CRLF: " . $self->LastError );
+            return undef;
         }
 
         # Finally, let's get the new message's UID from the peer:
-        my $new_mid;
-        undef $code;
-        until ($code) {
-            $peer->_debug("Reading from target: expect new uid in response");
+        $peer->_debug("Reading from target: expect new uid in response");
+        $code = $peer->_get_response($ptrans) or return undef;
 
-            my $output = $peer->_read_line or last;
-            foreach my $o (@$output) {
-                $peer->_record( $ptrans, $o );
-                next unless $peer->_is_output($o);
+        my $new_mid = "unknown";
+        if ( $code eq "OK" ) {
+            my $data = join '', $self->Results;
 
-                $code    = $o->[DATA] =~ /^$ptrans (OK|BAD|NO)/mi ? $1 : undef;
-                $new_mid = $o->[DATA] =~ /APPENDUID \d+ (\d+)/    ? $1 : undef
-                  if $code;
-
-                if ( $o->[DATA] =~ /^\*\s+BYE/im ) {
-                    $peer->State(Unconnected);
-                    return undef;
-                }
-            }
-
-            $new_mid ||= "unknown";
+            # look for something like return size or self if no size found:
+            # <tag> OK [APPENDUID <uid> <size>] APPEND completed
+            my $ret = $data =~ m#\s+(\d+)\]# ? $1 : undef;
+            $new_mid = $ret;
         }
+
         if ( $self->Debug ) {
             $self->_debug( "Copied message $mid in folder $folder to "
                   . $peer->User . '@'
@@ -1056,7 +993,7 @@ sub migrate {
         }
     }
 
-    $self;
+    return $self;
 }
 
 # Optimization of wait time between syswrite calls only runs if syscalls
@@ -1221,8 +1158,7 @@ sub _imap_command_do {
     my $self   = shift;
     my $opt    = ref( $_[0] ) eq "HASH" ? shift : {};
     my $string = shift or return undef;
-    my $good   = shift || 'GOOD';
-    my $qgood  = quotemeta $good;
+    my $good   = shift;
 
     $opt->{addcrlf} = 1 unless exists $opt->{addcrlf};
     $opt->{addtag}  = 1 unless exists $opt->{addtag};
@@ -1254,37 +1190,69 @@ sub _imap_command_do {
         return undef;
     }
 
-    my ( $code, $data );
+    my $code = $self->_get_response( $tag, $good ) or return undef;
+
+    if ( $code eq "BYE" and $string eq "$tag LOGOUT" ) {
+        return $self;
+    }
+    elsif ( $code eq "OK" ) {
+        return $self;
+    }
+    elsif ( $good and $code eq $good ) {
+        return $self;
+    }
+    else {
+        return undef;
+    }
+}
+
+sub _get_response {
+    my ( $self, $tag, $good ) = @_;
+
+    # tag can be a ref (compiled regex) or we quote it or default to \S+
+    my $qtag = ref($tag) ? $tag : defined($tag) ? quotemeta($tag) : qr/\S+/;
+    my $qgood = defined($good) ? quotemeta($good) : undef;
+    my $count = $self->Count;
+
+    my ( $out, $code ) = ( [], undef );
 
     until ($code) {
         my $output = $self->_read_line or return undef;
+        $out = $output;    # keep last response just in case
+
+        # not using last on first match? paranoia or right thing?
         foreach my $o (@$output) {
             $self->_record( $count, $o );
             $self->_is_output($o) or next;
 
-            if ( $good eq '+' && $o->[DATA] =~ /^$qgood/m ) {
+            my $data = $o->[DATA];
+            if ( $good and $good eq '+' and $data =~ /^$qgood/m ) {
                 $code = $good;
             }
-            elsif ( $o->[DATA] =~ /^$tag\s+(OK|BAD|NO|$qgood)/mi ) {
-                ($code) = $1;
-                $data = $o->[DATA];
+            elsif ( $good and $good ne '+' and $data =~ /^$qtag\s+($qgood)/im )
+            {
+                $code = $good;
             }
-
-            if ( $o->[DATA] =~ /^\*\s+BYE/im ) {
-                $self->State(Unconnected);
-                $self->LastError( $o->[DATA] ) unless $string eq "$tag LOGOUT";
-                return undef;
+            elsif ( $data =~ /^$qtag\s+(OK|BAD|NO)/im ) {
+                $code = $1;
+                $self->LastError($data) unless ( $code eq "OK" );
+            }
+            elsif ( $data =~ /^\*\s+(BYE)/im ) {
+                $code = $1;
             }
         }
     }
 
-    if ( $code eq "OK" or $code eq $good ) {
-        return $self;
+    if ($code) {
+        $code = uc($code) unless ( $good and $code eq $good );
+        $self->State(Unconnected) if ( $code eq "BYE" );
     }
-    else {
-        $self->LastError($data);
-        return undef;
+    elsif ( !$self->LastError ) {
+        my $info = "unexpected response: " . join( " ", @$out );
+        $self->LastError($info);
     }
+
+    return $code;
 }
 
 sub _imap_uid_command {
@@ -1332,38 +1300,16 @@ sub _send_line {
 
     if ( $string =~ s/^([^\n{]*\{(\d+)\}$CRLF)(.)/$3/o ) {
 
-        # Line starts with literal
+        # string starts with literal
         my ( $first, $len ) = ( $1, $2 );
         $self->_debug("Sending literal: $first\tthen: $string");
 
         $self->_send_line($first) or return undef;
-        my $output = $self->_read_line or return undef;
 
-        my $code;
-        foreach my $o (@$output) {
-            $self->_record( $self->Count, $o );
-            if ( $o->[DATA] =~ /^\+/ ) {
-                $code = 1;
-            }
-            elsif ( $o->[DATA] =~ /^\*\s+BYE/ ) {
-                $self->State(Unconnected);
-                $self->close;
-                $self->LastError( $o->[DATA] );
-                return undef;
-            }
-            elsif ( $o->[DATA] =~ /^\S+\s+(?:NO|BAD)/i ) {
-                $self->LastError( $o->[DATA] );
-                return undef;
-            }
-        }
+        # any tag will and allow for continue from literal requests
+        my $code = $self->_get_response( undef, '+' ) or return undef;
 
-        unless ($code) {
-            $self->LastError( "unexpected response: " . join( " ", @$output ) )
-              unless $self->LastError;
-            return undef;
-        }
-
-        # the second part follows the non-literal output, as below.
+        # non-literal part continues below...
     }
 
     unless ( $self->IsConnected ) {
@@ -1421,7 +1367,7 @@ sub _send_bytes($) {
     }
 
     $self->_debug("Sent $total bytes");
-    $total;
+    return $total;
 }
 
 # _read_line: read one line from the socket
@@ -1457,7 +1403,8 @@ sub _read_line {
     until (
         @$oBuffer    # there's stuff in output buffer:
           && $oBuffer->[-1][TYPE] eq 'OUTPUT'    # that thing is an output line:
-          && $oBuffer->[-1][DATA] =~ /\r?\n$/  # the last thing there has cr-lf:
+          && $oBuffer->[-1][DATA] =~
+          /$CR?$LF$/o            # the last thing there has cr-lf:
           && !length $iBuffer    # and the input buffer has been MT'ed:
       )
     {
@@ -1508,10 +1455,10 @@ sub _read_line {
             return undef;
         }
 
-        while ( $iBuffer =~ s/^(.*?\r?\n)// )    # consume line
+        while ( $iBuffer =~ s/^(.*?$CR?$LF)//o )    # consume line
         {
             my $current_line = $1;
-            if ( $current_line !~ s/\s*\{(\d+)\}\r?\n$// ) {
+            if ( $current_line !~ s/\s*\{(\d+)\}$CR?$LF$//o ) {
                 push @$oBuffer, [ $index++, 'OUTPUT', $current_line ];
                 next;
             }
@@ -1977,7 +1924,7 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
         foreach my $w (@words) {
             if ( $l =~ /\Q$w\E\s*$/i ) {
                 $entry->{$w} = $output->[ $x + 1 ];
-                $entry->{$w} =~ s/(?:\n?\r)+$//g;
+                $entry->{$w} =~ s/(?:$CR?$LF)+$//og;
                 chomp $entry->{$w};
             }
             elsif (
@@ -2187,7 +2134,7 @@ sub parse_headers {
     my %fieldmap = map { ( lc($_) => $_ ) } @fields;
     my $msgid;
 
-    foreach my $header ( map { split /\r?\n/ } @$raw ) {
+    foreach my $header ( map { split /$CR?$LF/o } @$raw ) {
 
         # little problem: Windows2003 has UID as body, not in header
         if (
@@ -2310,7 +2257,7 @@ sub _search_date($$$) {
     my @hits;
     foreach ( $self->History ) {
         chomp;
-        s/\r$//;
+        s/$CR?$LF$//o;
         s/^\*\s+SEARCH\s+//i or next;
         push @hits, grep /\d/, split;
     }
@@ -2337,7 +2284,7 @@ sub or {
     my @hits;
     foreach ( $self->History ) {
         chomp;
-        s/\r$//;
+        s/$CR?$LF$//o;
         s/^\*\s+SEARCH\s+//i or next;
         push @hits, grep /\d/, split;
     }
@@ -2376,7 +2323,7 @@ sub search {
     my @hits;
     foreach ( $self->History ) {
         chomp;
-        s/\r\n?/ /g;
+        s/$CR?$LF$//o;
         s/^\*\s+SEARCH\s+(?=.*?\d)// or next;
         push @hits, grep /^\d+$/, split;
     }
@@ -2429,7 +2376,7 @@ sub thread {
     my $thread;
     foreach ( $self->History ) {
         /^\*\s+THREAD\s+/ or next;
-        s/\r\n*|\n+/ /g;
+        s/$CR?$LF|$LF+/ /og;
         $thread = $thread_parser->start($_);
     }
 
@@ -2534,7 +2481,7 @@ sub namespace {
     my @namespaces = map { /^\* NAMESPACE (.*)/ ? $1 : () } $got->Results;
 
     my $namespace = shift @namespaces;
-    $namespace =~ s/\r?\n$//;
+    $namespace =~ s/$CR?$LF$//o;
 
     my ( $personal, $shared, $public ) = $namespace =~ m#
         (NIL|\((?:\([^\)]+\)\s*)+\))\s
@@ -2610,7 +2557,6 @@ sub append {
     my $self   = shift;
     my $folder = shift;
     my $text   = @_ > 1 ? join( $CRLF, @_ ) : shift;
-    $text =~ s/\r?\n/$CRLF/og;
 
     $self->append_string( $folder, $text );
 }
@@ -2633,7 +2579,7 @@ sub append_string($$$;$$) {
         $date = qq("$date") if $date !~ /^"/;
     }
 
-    $text =~ s/\r?\n/$CRLF/g;
+    $text =~ s/\r?\n/$CRLF/og;
 
     my $command =
         "APPEND $folder "
@@ -2656,80 +2602,69 @@ sub append_string($$$;$$) {
 
 sub append_file {
     my ( $self, $folder, $file, $control, $flags, $use_filetime ) = @_;
-    my $count   = $self->Count( $self->Count + 1 );    #???? too early?
     my $mfolder = $self->Massage($folder);
 
     $flags ||= '';
     my $fflags = $flags =~ m/^\(.*\)$/ ? $flags : "($flags)";
 
-    unless ( -f $file ) {
-        $self->LastError("File $file not found.");
+    my @err;
+    push( @err, "folder not specified" )
+      unless ( defined($folder) and $folder ne "" );
+
+    my $fh;
+    if ( !defined($file) ) {
+        push( @err, "file not specified" );
+    }
+    elsif ( ref($file) ) {
+        $fh = $file;    # let the caller pass in their own file handle directly
+    }
+    elsif ( !-f $file ) {
+        push( @err, "file '$file' not found" );
+    }
+    else {
+        $fh = IO::File->new( $file, 'r' )
+          or push( @err, "Unable to open file '$file': $!" );
+    }
+
+    if (@err) {
+        $self->LastError( join( ", ", @err ) );
         return undef;
     }
 
-    my $fh = IO::File->new( $file, 'r' );
-    unless ($fh) {
-        $self->LastError("Unable to open $file: $!");
-        return undef;
+    my $date;
+    if ( $fh and $use_filetime ) {
+        my $f = $self->Rfc2060_datetime( ( stat($fh) )[9] );
+        $date = qq("$f");
     }
 
-    my $date = '';
-    if ($use_filetime) {
-        my $f = $self->Rfc2060_datetime( ( $fh->stat )[9] );
-        $date = qq("$f" );
+    # BUG? seems wasteful to do this always, provide a "fast path" option?
+    my $length = 0;
+    {
+        local $/ = "\n";    # just in case global is not default
+        while ( my $line = <$fh> ) {    # do no read the whole file at once!
+            $line =~ s/\r?\n$/$CRLF/;
+            $length += length($line);
+        }
+        seek( $fh, 0, 0 );
     }
 
-    my $bare_nl_count = 0;
-    while (<$fh>) {    # do no read the whole file at once!
-        $bare_nl_count++ if m/^\n$|[^\r]\n$/;
-    }
+    my $string = "APPEND $mfolder";
+    $string .= " $fflags" if ( $fflags ne "" );
+    $string .= " $date"   if ( defined($date) );
+    $string .= " {$length}";
 
-    seek( $fh, 0, 0 );
-
-    my $clear = $self->Clear;
-    $self->Clear($clear)
-      if $self->Count >= $clear && $clear > 0;
-
-    my $length = $bare_nl_count + -s $file;
-    my $string = "$count APPEND $mfolder $fflags $date\{$length}$CRLF";
-
-    $self->_record( $count, [ $self->_next_index($count), "INPUT", $string ] );
-
-    unless ( $self->_send_line($string) ) {
+    my $rc = $self->_imap_command( $string, '+' );
+    unless ($rc) {
         $self->LastError( "Error sending '$string': " . $self->LastError );
-        $fh->close;
         return undef;
     }
 
-    my $code;
-
-    until ($code) {
-        my $output = $self->_read_line;
-        unless ($output) {
-            $fh->close;
-            return undef;
-        }
-
-        foreach my $o (@$output) {
-            $self->_record( $count, $o );
-            $code = $o->[DATA] =~ /(^\+|^\d+\sNO\s|^\d+\sBAD)\s/i ? $1 : undef;
-
-            if ( $o->[DATA] =~ /^\*\s+BYE/ ) {
-                $self->State(Unconnected);
-                $fh->close;
-                return undef;
-            }
-            elsif ( $o->[DATA] =~ /^\d+\s+(NO|BAD)/i ) {
-                $fh->close;
-                return undef;
-            }
-        }
-    }
+    my $count = $self->Count;
 
     # Now send the message itself
     my $buffer;
     while ( $fh->sysread( $buffer, APPEND_BUFFER_SIZE ) ) {
-        $buffer =~ s/(?<!\r)\n/$CRLF/og;
+        $buffer =~ s/\r?\n/$CRLF/og;
 
         $self->_record(
             $count,
@@ -2741,40 +2676,32 @@ sub append_file {
 
         my $bytes_written = $self->_send_bytes( \$buffer );
         unless ($bytes_written) {
-            $self->LastError(
-                "Error sending append msg text: " . $self->LastError );
-            $fh->close;
+            $self->LastError( "Error appending message: " . $self->LastError );
             return undef;
         }
     }
 
-    # Now for the crucial test: Did the append work or not?
-    my $uid;
-    undef $code;
-    until ($code) {
-        my $output = $self->_read_line or return undef;
-        foreach my $o (@$output) {
-            $self->_record( $count, $o );
-            $self->_debug("append_file: Does $o->[DATA] have the code");
-            $code = $o->[DATA] =~ m/^\d+\s(NO|BAD|OK)/i  ? $1 : undef;
-            $uid  = $o->[DATA] =~ m/UID\s+\d+\s+(\d+)\]/ ? $1 : undef;
-
-            if ( $o->[DATA] =~ /^\*\s+BYE/ ) {
-                $self->State(Unconnected);
-                $fh->close;
-                return undef;
-            }
-            elsif ( $o->[DATA] =~ /^\d+\s+(NO|BAD)/i ) {
-                $fh->close;
-                return undef;
-            }
-        }
+    # finish off append
+    unless ( $self->_send_bytes( \$CRLF ) ) {
+        $self->LastError( "Error appending CRLF: " . $self->LastError );
+        return undef;
     }
-    $fh->close;
 
-    $code ne 'OK' ? undef
-      : defined $uid ? $uid
-      :                $self;
+    # Now for the crucial test: Did the append work or not?
+    my $code = $self->_get_response($count) or return undef;
+
+    if ( $code eq "OK" ) {
+        my $data = join '', $self->Results;
+
+        # look for something like return size or self if no size found:
+        # <tag> OK [APPENDUID <uid> <size>] APPEND completed
+        my $ret = $data =~ m#\s+(\d+)\]# ? $1 : $self;
+
+        return $ret;
+    }
+    else {
+        return undef;
+    }
 }
 
 sub authenticate {
@@ -2885,8 +2812,7 @@ sub authenticate {
     }
 
     unless ( $self->_send_line( $response->( $code, $self ) ) ) {
-        $self->LastError(
-            "Error sending append msg text: " . $self->LastError );
+        $self->LastError( "Error sending $scheme data: " . $self->LastError );
         return undef;
     }
 
@@ -2900,7 +2826,7 @@ sub authenticate {
             if ($code) {
                 unless ( $self->_send_line( $response->( $code, $self ) ) ) {
                     $self->LastError(
-                        "Error sending append msg text: " . $self->LastError );
+                        "Error sending $scheme data: " . $self->LastError );
                     return undef;
                 }
                 undef $code;    # Clear code; we're still not finished
@@ -2921,8 +2847,7 @@ sub authenticate {
       if $scheme eq 'NTLM';
 
     $self->State(Authenticated);
-    $self;
-
+    return $self;
 }
 
 # UIDPLUS response from a copy: [COPYUID (uidvalidity) (origuid) (newuid)]
@@ -2948,7 +2873,7 @@ sub copy {
     my @uids;
     foreach (@results) {
         chomp;
-        s/\r$//;
+        s/$CR?$LF$//o;
         s/^.*\[COPYUID\s+\d+\s+[\d:,]+\s+([\d:,]+)\].*/$1/ or next;
         push @uids, /(\d+):(\d+)/ ? ( $1 ... $2 ) : ( split /\,/ );
 
@@ -3040,7 +2965,7 @@ sub getquota {
     return $self->_imap_command("GETQUOTA $who") ? $self->Results : undef;
 }
 
-# usage: $imap->setquota($folder, storage => 512)
+# usage: $self->setquota($folder, storage => 512)
 sub setquota(@) {
     my ( $self, $what ) = ( shift, shift );
     my $who = $what ? $self->Massage($what) : "user/$self->{User}";
