@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.17';
+our $VERSION = '3.18_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -323,6 +323,7 @@ sub Socket($) {
     setsockopt( $sock, SOL_SOCKET, SO_KEEPALIVE, 1 ) if $self->Keepalive;
 
     # LastError may be set by _read_line via _get_response
+    # look for "* (OK|BAD|NO|PREAUTH)"
     my $code = $self->_get_response( '*', 'PREAUTH' ) or return undef;
 
     if ( $code eq 'BYE' || $code eq 'NO' ) {
@@ -679,10 +680,11 @@ sub message_to_file {
         return undef;
     }
 
+    # look for "<tag> (OK|BAD|NO)"
     my $code = $self->_get_response( { outref => $handle }, $trans )
       or return undef;
 
-    return $code eq "OK" ? $self : undef;
+    return $code eq 'OK' ? $self : undef;
 }
 
 sub message_uid {
@@ -821,9 +823,9 @@ sub migrate {
               until $fromBuffer =~ /$CRLF/o;
 
             $code =
-                $fromBuffer =~ /^\+/                   ? 'OK'
-              : $fromBuffer =~ /^(?:\d+\s(BAD|NO|OK))/ ? $1
-              :                                          undef;
+                $fromBuffer =~ /^\+/                  ? 'OK'
+              : $fromBuffer =~ /^\d+\s+(BAD|NO|OK)\b/ ? $1
+              :                                         undef;
 
             $peer->_debug("$folder: received $fromBuffer from server");
 
@@ -884,12 +886,11 @@ sub migrate {
 
                 $self->_record( $trans, [ 0, "OUTPUT", $fromBuffer ] );
 
-                if ( $fromBuffer =~ /^$trans (?:NO|BAD)/ ) {
+                if ( $fromBuffer =~ /^$trans\s+(?:NO|BAD)/ ) {
                     $self->LastError($fromBuffer);
                     next MIGMSG;
                 }
-
-                if ( $fromBuffer =~ /^$trans (?:OK)/ ) {
+                elsif ( $fromBuffer =~ /^$trans\s+OK/ ) {
                     $self->LastError( "Unexpected good return code "
                           . "from source host: $fromBuffer" );
                     next MIGMSG;
@@ -956,8 +957,8 @@ sub migrate {
         $leftSoFar -= $readSoFar;
         my $fromBuffer = "";
 
-        # Finish up reading the server response from the fetch cmd
-        #     on the source system:
+        # Finish up reading the server fetch response from the source system:
+        # look for "<trans> (OK|BAD|NO)"
         $self->_debug("Reading from source: expecting 'OK' response");
         $code = $self->_get_response($trans) or return undef;
 
@@ -968,11 +969,12 @@ sub migrate {
         }
 
         # Finally, let's get the new message's UID from the peer:
+        # look for "<tag> (OK|BAD|NO)"
         $peer->_debug("Reading from target: expect new uid in response");
         $code = $peer->_get_response($ptrans) or return undef;
 
         my $new_mid = "unknown";
-        if ( $code eq "OK" ) {
+        if ( $code eq 'OK' ) {
             my $data = join '', $self->Results;
 
             # look for something like return size or self if no size found:
@@ -1191,12 +1193,13 @@ sub _imap_command_do {
         return undef;
     }
 
+    # look for "<tag> (OK|BAD|NO|$good)" (or "+..." if $good is '+')
     my $code = $self->_get_response( $tag, $good ) or return undef;
 
-    if ( $code eq "BYE" and $string eq "$tag LOGOUT" ) {
+    if ( $code eq 'BYE' and $string eq "$tag LOGOUT" ) {
         return $self;
     }
-    elsif ( $code eq "OK" ) {
+    elsif ( $code eq 'OK' ) {
         return $self;
     }
     elsif ( $good and $code eq $good ) {
@@ -1216,46 +1219,46 @@ sub _get_response {
     my $tag  = shift;
     my $good = shift;
 
-    my @readopt;
-    push( @readopt, $opt->{outref} ) if defined $opt->{outref};
-
     # tag can be a ref (compiled regex) or we quote it or default to \S+
     my $qtag = ref($tag) ? $tag : defined($tag) ? quotemeta($tag) : qr/\S+/;
-    my $qgood = defined($good) ? quotemeta($good) : undef;
-    my $count = $self->Count;
+    my $qgood = ref($good) ? $good : defined($good) ? quotemeta($good) : undef;
+    my @readopt = defined( $opt->{outref} ) ? ( $opt->{outref} ) : ();
 
-    my ( $out, $code ) = ( [], undef );
-
+    my ( $count, $out, $code ) = ( $self->Count, [], undef );
     until ($code) {
         my $output = $self->_read_line(@readopt) or return undef;
         $out = $output;    # keep last response just in case
 
         # not using last on first match? paranoia or right thing?
+        # only uc() when match is not on case where $tag|$good is a ref()
         foreach my $o (@$output) {
             $self->_record( $count, $o );
             $self->_is_output($o) or next;
 
             my $data = $o->[DATA];
-            if ( $good and $good eq '+' and $data =~ /^$qgood/m ) {
+            if ( $good and $good ne '+' and $data =~ /^$qtag\s+($qgood)/i ) {
+                $code = $1;
+                $code = uc($code) unless ref($good);
+            }
+            elsif ( $good and $good eq '+' and $data =~ /^$qgood/ ) {
                 $code = $good;
             }
-            elsif ( $good and $good ne '+' and $data =~ /^$qtag\s+($qgood)/im )
-            {
-                $code = $good;
+            elsif ( $tag eq '+' and $data =~ /^$qtag/ ) {
+                $code = $tag;
             }
-            elsif ( $data =~ /^$qtag\s+(OK|BAD|NO)/im ) {
-                $code = $1;
-                $self->LastError($data) unless ( $code eq "OK" );
+            elsif ( $data =~ /^$qtag\s+(OK|BAD|NO)\b/i ) {
+                $code = uc($1);
+                $self->LastError($data) unless ( $code eq 'OK' );
             }
-            elsif ( $data =~ /^\*\s+(BYE)/im ) {
-                $code = $1;
+            elsif ( $data =~ /^\*\s+(BYE)\b/i ) {
+                $code = uc($1);
             }
         }
     }
 
     if ($code) {
         $code = uc($code) unless ( $good and $code eq $good );
-        $self->State(Unconnected) if ( $code eq "BYE" );
+        $self->State(Unconnected) if ( $code eq 'BYE' );
     }
     elsif ( !$self->LastError ) {
         my $info = "unexpected response: " . join( " ", @$out );
@@ -1316,8 +1319,8 @@ sub _send_line {
 
         $self->_send_line($first) or return undef;
 
-        # any tag will and allow for continue from literal requests
-        my $code = $self->_get_response( undef, '+' ) or return undef;
+        # look for "<anything> OK|NO|BAD" or "+..."
+        my $code = $self->_get_response( qr(\S+), '+' ) or return undef;
 
         # non-literal part continues below...
     }
@@ -2698,9 +2701,10 @@ sub append_file {
     }
 
     # Now for the crucial test: Did the append work or not?
+    # look for "<tag> (OK|BAD|NO)"
     my $code = $self->_get_response($count) or return undef;
 
-    if ( $code eq "OK" ) {
+    if ( $code eq 'OK' ) {
         my $data = join '', $self->Results;
 
         # look for something like return size or self if no size found:
@@ -2741,25 +2745,10 @@ sub authenticate {
         return undef;
     }
 
-    my $code;
-    until ($code) {
-        my $output = $self->_read_line or return undef;
-        foreach my $o (@$output) {
-            $self->_record( $count, $o );
-            $code =
-                $o->[DATA] =~ /^\+\s+(\S+)\s*$/ ? $1
-              : $o->[DATA] =~ /^\+\s*$/         ? 'OK'
-              :                                   undef;
+    # look for "+ <anyword>" or just "+"
+    my $code = $self->_get_response( '+', qr(\S+) ) or return undef;
 
-            if ( $o->[DATA] =~ /^\*\s+BYE/ ) {
-                $self->State(Unconnected);
-                return undef;
-            }
-        }
-    }
-
-    return undef
-      if $code =~ /^BAD|^NO/;
+    return undef if ( $code eq 'BAD' or $code eq 'NO' or $code eq 'BYE' );
 
     if ( $scheme eq 'CRAM-MD5' ) {
         $response ||= sub {
@@ -2777,8 +2766,8 @@ sub authenticate {
             require Authen::SASL;
             require Digest::MD5;
 
-            my $authname = $client->Authuser;
-            defined $authname or $authname = $client->User;
+            my $authname =
+              defined $client->Authuser ? $client->Authuser : $client->User;
 
             my $sasl = Authen::SASL->new(
                 mechanism => 'DIGEST-MD5',
@@ -2813,6 +2802,7 @@ sub authenticate {
     elsif ( $scheme eq 'NTLM' ) {
         $response ||= sub {
             my ( $code, $client ) = @_;
+
             require Authen::NTLM;
             Authen::NTLM::ntlm_user( $self->User );
             Authen::NTLM::ntlm_password( $self->Password );
@@ -2826,6 +2816,8 @@ sub authenticate {
         return undef;
     }
 
+    # this code may be a little too custom to try and use _get_response()
+    # look for "+ <anyword>" (not just "+") otherwise "<tag> (OK|BAD|NO)"
     undef $code;
     until ($code) {
         my $output = $self->_read_line or return undef;
@@ -2839,19 +2831,22 @@ sub authenticate {
                         "Error sending $scheme data: " . $self->LastError );
                     return undef;
                 }
-                undef $code;    # Clear code; we're still not finished
+                undef $code;    # clear code as we are not finished yet
             }
 
-            $code = $1 if $o->[DATA] =~ /^$count\s+(OK|NO|BAD)\b/;
-            if ( $o->[DATA] =~ /^\*\s+BYE/ ) {
+            if ( $o->[DATA] =~ /^$count\s+(OK|NO|BAD)\b/i ) {
+                $code = uc($1);
+                $self->LastError( $o->[DATA] ) unless ( $code eq 'OK' );
+            }
+            elsif ( $o->[DATA] =~ /^\*\s+BYE/ ) {
                 $self->State(Unconnected);
+                $self->LastError( $o->[DATA] );
                 return undef;
             }
         }
     }
 
-    $code eq 'OK'
-      or return undef;
+    return undef unless $code eq 'OK';
 
     Authen::NTLM::ntlm_reset()
       if $scheme eq 'NTLM';
