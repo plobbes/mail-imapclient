@@ -679,7 +679,8 @@ sub message_to_file {
         return undef;
     }
 
-    my $code = $self->_get_response($trans) or return undef;
+    my $code = $self->_get_response( { outref => $handle }, $trans )
+      or return undef;
 
     return $code eq "OK" ? $self : undef;
 }
@@ -1206,8 +1207,17 @@ sub _imap_command_do {
     }
 }
 
+# _get_response get IMAP response optionally send data somewhere
+# options:
+#   outref => GLOB|CODE - reference to send output to (see _read_line)
 sub _get_response {
-    my ( $self, $tag, $good ) = @_;
+    my $self = shift;
+    my $opt  = ref( $_[0] ) eq "HASH" ? shift : {};
+    my $tag  = shift;
+    my $good = shift;
+
+    my @readopt;
+    push( @readopt, $opt->{outref} ) if defined $opt->{outref};
 
     # tag can be a ref (compiled regex) or we quote it or default to \S+
     my $qtag = ref($tag) ? $tag : defined($tag) ? quotemeta($tag) : qr/\S+/;
@@ -1217,7 +1227,7 @@ sub _get_response {
     my ( $out, $code ) = ( [], undef );
 
     until ($code) {
-        my $output = $self->_read_line or return undef;
+        my $output = $self->_read_line(@readopt) or return undef;
         $out = $output;    # keep last response just in case
 
         # not using last on first match? paranoia or right thing?
