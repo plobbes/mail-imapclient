@@ -85,6 +85,14 @@ sub LastError {
         $err =~ s/$CRLF$//og;
         local ($!);    # old versions of Carp could reset $!
         $self->_debug( Carp::longmess("ERROR: $err") );
+
+        # hopefully this is rare...
+        if ( $err eq "NO not connected" ) {
+            my $lerr = $self->{LastError} || "";
+            my $emsg = "Trying command when NOT connected!";
+            $emsg .= " LastError was: $lerr" if $lerr;
+            Carp::cluck($emsg);
+        }
     }
     $@ = $self->{LastError} = $err;
 }
@@ -601,6 +609,7 @@ sub message_string {
 
     my $peek = $self->Peek      ? '.PEEK'        : '';
     my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
+    return undef if $self->LastError;
 
     $self->fetch( $msg, $cmd )
       or return undef;
@@ -630,7 +639,8 @@ sub bodypart_string {
     unless ( $self->imap4rev1 ) {
         $self->LastError( "Unable to get body part; server "
               . $self->Server
-              . " does not support IMAP4REV1" );
+              . " does not support IMAP4REV1" )
+          unless $self->LastError;
         return undef;
     }
 
@@ -668,7 +678,9 @@ sub message_to_file {
 
     my $peek = $self->Peek      ? '.PEEK'        : '';
     my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
-    my $uid  = $self->Uid       ? "UID "         : "";
+    return undef if $self->LastError;
+
+    my $uid    = $self->Uid ? "UID " : "";
     my $trans  = $self->Count( $self->Count + 1 );
     my $string = "$trans ${uid}FETCH $msgs $cmd";
 
@@ -794,6 +806,7 @@ sub migrate {
             $extract_size = sub { $_[0] =~ /\(.*BODY\[\]<\d+> \{(\d+)\}/i; $1 };
         }
         else {
+            return undef if $self->LastError;
             $cmd = $self->Peek ? 'RFC822.PEEK' : 'RFC822';
             $extract_size = sub { $_[0] =~ /\(RFC822\[\]<\d+> \{(\d+)\}/i; $1 };
         }
@@ -1118,9 +1131,6 @@ sub reconnect {
     my $einfo = $self->LastError || "";
     $self->_debug( "reconnecting to ", $self->Server, ", last error: $einfo" );
 
-    # reset error
-    $self->LastError(undef);
-
     # reconnect and select appropriate folder
     unless ( $self->connect ) {
         $self->LastError( $einfo . ", reconnect error: " . $self->LastError );
@@ -1135,20 +1145,69 @@ sub reconnect {
 
 # wrapper for _imap_command_do to enable retrying on lost connections
 sub _imap_command {
-    my $self  = shift;
-    my $retry = $self->Reconnectretry || 0;
-    my $tries = 0;
+    my $self = shift;
 
-    my $rc;
+    my ( $tries, $retry ) = ( 0, $self->Reconnectretry || 0 );
+    my ( $rc, @err );
+
     while ( $tries++ <= $retry ) {
-        $rc = $self->_imap_command_do(@_);
+
+        if ( $self->IsConnected ) {    # only try commands when connected
+            if ( $self->LastError ) {    # save errors
+                my $str = $self->LastError;
+                my ( $sz, $len ) = ( 64, length($str) );
+                $str =~ s/$CR?$LF$/\<CRLF\>/omg;
+
+                if ( !$self->Debug and $len > $sz * 2 ) {
+                    my $beg = substr( $str, 0,    $sz );
+                    my $end = substr( $str, -$sz, $sz );
+                    $str = $beg . "..." . $end;
+                }
+                push( @err, $str );
+
+                # reset error and try
+                $self->_debug("Reset LastError");
+                $self->LastError(undef);
+            }
+
+            $rc = $self->_imap_command_do(@_);
+        }
+        elsif ( !$self->LastError ) {    # hopefully unlikely...
+            $self->LastError("NO not connected");
+        }
+
         if ( !defined($rc) and $retry and $self->IsUnconnected ) {
-            ( $! == EPIPE or $! == ECONNRESET ) ? $self->reconnect : last;
+
+            last
+              unless (
+                   $! == EPIPE
+                or $! == ECONNRESET
+                or $self->LastError =~ /^(?:timeout|socket closed|\* BYE\b)\s/i
+                or
+
+                # BUG? HACK - find attempts failing to see other errors
+                $self->LastError =~ /NO not connected/
+              );
+            $self->reconnect;
         }
         else {
             last;
         }
     }
+
+    unless ($rc) {
+        push( @err, $self->LastError ) if $self->LastError;
+        my ( %seen, @keep, @info );
+        foreach my $msg (@err) {
+            next if $seen{$msg}++;
+            push( @keep, $msg );
+        }
+        foreach my $msg (@keep) {
+            push( @info, $msg . ( $seen{$msg} > 1 ? " ($seen{$msg}x)" : "" ) );
+        }
+        $self->LastError( join( "; ", @info ) );
+    }
+
     return $rc;
 }
 
@@ -1166,12 +1225,6 @@ sub _imap_command_do {
     $opt->{addcrlf} = 1 unless exists $opt->{addcrlf};
     $opt->{addtag}  = 1 unless exists $opt->{addtag};
 
-    # reset error in case the last error was non-fatal but never cleared
-    if ( $self->LastError ) {
-        $self->_debug( "Reset LastError: " . $self->LastError );
-        $self->LastError(undef);
-    }
-
     my $clear = $self->Clear;
     $self->Clear($clear)
       if $self->Count >= $clear && $clear > 0;
@@ -1181,15 +1234,15 @@ sub _imap_command_do {
     $string = "$tag $string" if $opt->{addtag};
 
     # for APPEND (append_string) only log first line of command
-    my $lstring = $string;
-    $lstring = $1 if ( $string =~ / ^ ( $tag \s+ APPEND \s+ .* ) $ /xi );
+    my $logstr = ( $string =~ /^($tag\s+APPEND\s+.*?)$CR?$LF/ ) ? $1 : $string;
 
     # BUG? use $self->_next_index($tag) ? or 0 ???
-    # $self->_record($tag, [$self->_next_index($tag), "INPUT", $lstring] );
-    $self->_record( $count, [ 0, "INPUT", $lstring ] );
+    # $self->_record($tag, [$self->_next_index($tag), "INPUT", $logstr] );
+    $self->_record( $count, [ 0, "INPUT", $logstr ] );
 
+    # $suppress (adding CRLF) set to 0 if $opt->{addcrlf} is TRUE
     unless ( $self->_send_line( $string, $opt->{addcrlf} ? 0 : 1 ) ) {
-        $self->LastError( "Error sending '$lstring': " . $self->LastError );
+        $self->LastError( "Error sending '$logstr': " . $self->LastError );
         return undef;
     }
 
@@ -1447,12 +1500,12 @@ sub _read_line {
         my $ret =
           $self->_sysread( $socket, \$iBuffer, $readlen, length $iBuffer );
         if ( $timeout && !defined $ret ) {
-            $emsg = "Error while reading data from server: $!";
+            $emsg = "error while reading data from server: $!";
             $self->State(Unconnected) if ( $! == ECONNRESET );
         }
 
         if ( defined $ret && $ret == 0 ) {    # Caught EOF...
-            $emsg = "Socket closed while reading data from server";
+            $emsg = "socket closed while reading data from server";
             $self->State(Unconnected);
         }
 
@@ -1532,13 +1585,13 @@ sub _read_line {
                     );
 
                     if ( $timeout && !defined $ret ) {
-                        $emsg = "Error while reading data from server: $!";
+                        $emsg = "error while reading data from server: $!";
                         $self->State(Unconnected) if ( $! == ECONNRESET );
                     }
 
                     # EOF: note IO::Socket::SSL does not support eof()
                     if ( defined $ret && $ret == 0 ) {
-                        $emsg = "Socket closed while reading data from server";
+                        $emsg = "socket closed while reading data from server";
                         $self->State(Unconnected);
                     }
 
@@ -1836,10 +1889,14 @@ sub fetch {
     my $self = shift;
     my $what = shift || "ALL";
 
-    my $take =
-        $what eq 'ALL' ? $self->Range( $self->messages )
-      : ref $what || $what =~ /^[,:\d]+\w*$/ ? $self->Range($what)
-      :                                        $what;
+    my $take = $what;
+    if ( $what eq 'ALL' ) {
+        my $msgs = $self->messages or return undef;
+        $take = $self->Range($msgs);
+    }
+    elsif ( ref $what || $what =~ /^[,:\d]+\w*$/ ) {
+        $take = $self->Range($what);
+    }
 
     my ( @data, $cmd );
     my ( $seq_set, @fetch_att ) = $self->_split_sequence( $take, "FETCH", @_ );
@@ -2358,13 +2415,14 @@ my $thread_parser;
 sub thread {
     my $self = shift;
 
-    # BUG? check return from has_capability?
     my $algorythm = shift
       || (
         $self->has_capability("THREAD=REFERENCES")
         ? 'REFERENCES'
         : 'ORDEREDSUBJECT'
       );
+    return undef if $self->LastError;
+
     my $charset = shift || 'UTF-8';
     my @a = @_ ? @_ : 'ALL';
 
@@ -2458,7 +2516,7 @@ sub capability {
 
 sub has_capability {
     my ( $self, $which ) = @_;
-    $self->capability;
+    $self->capability or return undef;
     $which ? $self->{CAPABILITY}{ uc $which } : undef;
 }
 
@@ -2486,7 +2544,8 @@ sub namespace {
 
     my $self = shift;
     unless ( $self->has_capability("NAMESPACE") ) {
-        $self->LastError( "NO NAMESPACE not supported by " . $self->Server );
+        $self->LastError( "NO NAMESPACE not supported by " . $self->Server )
+          unless $self->LastError;
         return undef;
     }
 
@@ -2602,7 +2661,7 @@ sub append_string($$$;$$) {
       . "}$CRLF";
 
     $command .= $text . $CRLF;
-    $self->_imap_command($command) or return undef;
+    $self->_imap_command( { addcrlf => 0 }, $command ) or return undef;
 
     my $data = join '', $self->Results;
 
@@ -2735,20 +2794,21 @@ sub authenticate {
         return undef;
     }
 
-    my $count  = $self->Count( $self->Count + 1 );
-    my $string = "$count AUTHENTICATE $scheme";
+    my $string = "AUTHENTICATE $scheme";
 
-    $self->_record( $count, [ $self->_next_index, "INPUT", $string ] );
+    # use _imap_command for retry mechanism...
+    $self->_imap_command( $string, '+' ) or return undef;
 
-    unless ( $self->_send_line($string) ) {
-        $self->LastError( "Error sending '$string': " . $self->LastError );
-        return undef;
-    }
+    my $count = $self->Count;
+    my $code;
 
     # look for "+ <anyword>" or just "+"
-    my $code = $self->_get_response( '+', qr(\S+) ) or return undef;
-
-    return undef if ( $code eq 'BAD' or $code eq 'NO' or $code eq 'BYE' );
+    foreach my $line ( $self->Results ) {
+        if ( $line =~ /^\+\s*(.*?)\s*$/ ) {
+            $code = $1;
+            last;
+        }
+    }
 
     if ( $scheme eq 'CRAM-MD5' ) {
         $response ||= sub {
@@ -2954,6 +3014,11 @@ sub size {
 
     foreach my $line (@$data) {
         return $1 if ( $line =~ /RFC822\.SIZE\s+(\d+)/ );
+    }
+
+    if ( !$self->LastError ) {
+        my $info = "no RFC822.SIZE found in: " . join( " ", @$data );
+        $self->LastError($info);
     }
     return undef;
 }
