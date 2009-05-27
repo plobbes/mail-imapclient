@@ -4,6 +4,30 @@ Changes from 3.17_01 to ?       made by Phil Lobbes
 Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 
+version 3.18_02: Wed May 27 10:02:24 EDT 2009
+	- *new attribute Ssl, when true causes IO::Socket::SSL to be
+	  used instead of IO::Socket::INET.  This change allows
+	  Reconnectretry logic to work on SSL connections too.
+        - have LastError cluck() if setting error to NO not connected
+        - handle errors from imap4rev1() in multiple places
+        - Reconnectretry/_imap_command enhancements/fixes
+	  + only run command if IsConnected
+	  + keep a temporary history of LastError(s)
+	  + sets LastError to NO not connected if ! IsConnected
+	  + retry =~ timeout|socket closed|* BYE| NO not connected
+        - _imap_command_do reduce data logged when using APPEND
+        - fetch() now handles messages() errors
+        - thread(), has_capability(), capability() better error checking
+        - authenticate() now uses _imap_command for retry mechanism
+        - size() now sets LastError when no RFC822.SIZE is found 
+
+version 3.18_01: Fri May 22 17:08:00 EDT 2009
+	- *update several methods to use common _get_response() method
+	- refactor most code handling imap responses
+	- new internal method _get_response() to reduce code duplication
+	- more regex cleanup $CR/$LF (not \r\n) per perlport/IMAP spec
+	- major cleanup/fix of append_file for rt.cpan.org#42434
+
 version 3.17: Thu May 21 01:40:08 EDT 2009
 	- ran all test code and lib/Mail/IMAPClient.pm through Perl::Tidy
 	- plan on using perltidy to standardize format going forward
@@ -31,7 +55,7 @@ version 3.17_04: Fri May 15 17:18:52 EDT 2009
 	- updated POD with new reconnect() method and Reconnectretry attr
 	- *new _imap_command() after renaming old one to _imap_command_do
 	  support retrying commands X times EPIPE/ECONNRESET errors
-	- *added Reconnectretry attr to control number of retry
+	- *new Reconnectretry attribute to control number of retry
 	  attempts (default is 0 - no reconnect/retry)
 	- *added reconnect() method to support Reconnectretry attr
 	  reconnect and updated _imap_command() method
@@ -74,7 +98,7 @@ version 3.17_03: Fri May  8 16:37:08 EDT 2009
 version 3.17_02: Fri May  1 16:44:21 EDT 2009
 	- cleanup of use/imported data
 	- use Socket $CRLF in many cases not \r\n per perlport/IMAP spec
-	- new Keepalive attr for use with new()/Socket() enables SO_KEEPALIVE
+	- *new Keepalive attribute used via new()/Socket() enables SO_KEEPALIVE
 	- LastError now uses Carp::confess for stack trace if Debug is true
 	- Maxcommandlength now defaults to 1000 per RFC2683 section 3.2.1.5
 	- added noop() to support IMAP NOOP
