@@ -739,7 +739,7 @@ B<bodypart_string> will return C<undef> if it encounters an error.
 
 Example:
 
-  my @features = $imap->capability
+  my $features = $imap->capability
     or die "Could not determine capability: ", $imap->LastError;
 
 The B<capability> method returns an array of capabilities as returned
@@ -1129,8 +1129,8 @@ it will be treated as one of the FETCH attributes and a new hash will
 be created and returned (either by value or by reference, depending on
 the context in which B<fetch_hash> was called).
 
-For example, if you have a folder with 3 messages and want the size and internal
-date for each of them, you could do the following:
+For example, if you have a folder with 3 messages and want the size
+and internal date for each of them, you could do the following:
 
   use Mail::IMAPClient;
   use Data::Dumper;
@@ -1270,7 +1270,9 @@ Example:
 
 Returns true if the IMAP server to which the IMAPClient object is
 connected has the capability specified as an argument to
-B<has_capability>.
+B<has_capability>.  If the server does not have the capability then
+the empty string "" is returned, if the underlying L</capability>
+calls fails then undef is returned.
 
 =head2 idle
 
@@ -1313,7 +1315,9 @@ Example:
   $imap->imap4rev1 or die "Could not imap4rev1: $@\n";
 
 Returns true if the IMAP server to which the IMAPClient object is
-connected has the IMAP4REV1 capability.
+connected has the IMAP4REV1 capability.  If the server does not have
+the capability then the empty string "" is returned, if the underlying
+L</capability> calls fails then undef is returned.
 
 =head2 internaldate
 
@@ -1780,16 +1784,17 @@ original message you will need to run L</expunge> (or L</close>).
 
 Example:
 
-  my @refs = $imap->namespace
+  my $refs = $imap->namespace
     or die "Could not namespace: $@\n";
 
 The namespace method runs the NAMESPACE IMAP command (as defined in
 RFC 2342).  When called in a list context, it returns a list of three
 references.  Each reference looks like this:
 
-  [ [ $prefix_1, $separator_1 ] ,
+  [
+    [ $prefix_1, $separator_1 ],
     [ $prefix_2, $separator_2 ],
-    [ $prefix_n , $separator_n]
+    [ $prefix_n, $separator_n ],
   ]
 
 The first reference provides a list of prefixes and separator
@@ -1804,7 +1809,7 @@ shared folders were not supported on the server but personal and
 public namespaces were both available (with one namespace each), the
 returned value might resemble this:
 
-  ( [ "", "/" ] , undef, [ "#news", "." ] );
+  [ [ "", "/" ] , undef, [ "#news", "." ] ];
 
 If the B<namespace> method is called in scalar context, it returns a
 reference to the above-mentioned list of three references, thus
@@ -1815,37 +1820,18 @@ this:
       [
           [ $user_prefix_1, $user_separator_1 ],
           [ $user_prefix_2, $user_separator_2 ],
-          [ $user_prefix_n, $user_separator_n ]
+          [ $user_prefix_n, $user_separator_n ],
       ],                    # or undef
       [
           [ $shared_prefix_1, $shared_separator_1 ],
           [ $shared_prefix_2, $shared_separator_2 ],
-          [ $shared_prefix_n, $shared_separator_n ]
+          [ $shared_prefix_n, $shared_separator_n ],
       ],                    # or undef
       [
           [ $public_prefix_1, $public_separator_1 ],
           [ $public_prefix_2, $public_separator_2 ],
-          [ $public_prefix_n, $public_separator_n ]
+          [ $public_prefix_n, $public_separator_n ],
       ],                    # or undef
-  ];
-
-Or, to look at our previous example (where shared folders are
-unsupported) called in scalar context:
-
-  $VAR1 = [
-      [
-          [
-              "" ,
-              "/",
-          ],
-      ],
-      undef,
-      [
-          [
-              "#news",
-              "."
-          ],
-      ],
   ];
 
 =head2 on
@@ -2963,6 +2949,8 @@ prematurely if the connection sits idle.  The B<Keepalive> parameter,
 when set to a true value, affects the behavior of L</new> and
 L</Socket> by enabling SO_KEEPALIVE on the socket.
 
+Version note: attribute added in Mail::IMAPClient 3.17
+
 =head2 Maxcommandlength
 
 The B<Maxcommandlength> attribute is used by fetch() to limit length
@@ -2980,6 +2968,8 @@ to DWIM.
 In practice, this parameter has proven to be useful to overcome a
 limit of 8000 octets for UW-IMAPD and 16384 octets for Courier/Cyrus
 IMAP servers.
+
+Version note: attribute added in Mail::IMAPClient 3.17
 
 =head2 Maxtemperrors
 
@@ -3183,13 +3173,15 @@ See also L</Prewritemethod>.
 
 =head2 Reconnectretry
 
-If an imap connection sits idle too long, the connection may be closed
+If an IMAP connection sits idle too long, the connection may be closed
 by the server or firewall, etc.  The B<Reconnectretry> parameter, when
 given a positive integer value, will cause Mail::IMAPClient to
 retrying IMAP commands up to X times when an EPIPE or ECONNRESET error
 occurs.  This is disabled (0) by default.
 
 See also L</Keepalive>
+
+Version note: attribute added in Mail::IMAPClient 3.17
 
 =head2 Server
 
@@ -3291,6 +3283,19 @@ For these reasons, the following example will work "out of the box":
 
 If you need more control over the socket, e.g. you have to implement a
 fancier authentication method, see L</RawSocket>.
+
+=head2 Ssl
+
+If an IMAP connection requires SSL you can set the Ssl attribute to
+'1' and Mail::IMAPClient will automatically use L<IO::Socket::SSL>
+instead of L<IO::Socket::INET> to connect to the server.  This
+attribute is used in the L</connect> method.
+
+See also L</connect> for details on connection initiatiation and
+L</Socket> and L</Rawsocket> if you need to take more control of
+connection management.
+
+Version note: attribute added in Mail::IMAPClient 3.18
 
 =head2 Supportedflags
 
