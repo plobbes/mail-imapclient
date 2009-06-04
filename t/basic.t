@@ -233,10 +233,10 @@ ok(
 );
 
 $imap->select("INBOX");
-$@ = "";
+$@ = undef;
 @hits =
   $imap->search( BEFORE => Mail::IMAPClient::Rfc2060_date(time), "UNDELETED" );
-ok( !$@, "search undeleted: $@" );
+ok( !$@, "search undeleted" ) or diag( '$@:' . $@ );
 
 #
 # Test migrate method
@@ -282,7 +282,7 @@ $im2->close;
 $im2->select($migtarget)
   or die "can't select $migtarget: $@";
 
-cmp_ok( $@, 'eq', '', "LastError not set" );
+ok( !$@, "LastError not set" ) or diag( '$@:' . $@ );
 
 #
 my $total_bytes1 = 0;
@@ -299,7 +299,7 @@ for ( $im2->search("ALL") ) {
     print "Size of msg $_ is $s\n" if $debug;
 }
 
-cmp_ok( $@,            'eq', '',            "LastError not set" );
+ok( !$@, "LastError not set" ) or diag( '$@:' . $@ );
 cmp_ok( $total_bytes1, '==', $total_bytes2, 'size source==target' );
 
 # cleanup
@@ -318,7 +318,7 @@ ok( $im2->logout, "logout" );
         ok( my $idle = $imap->idle, "idle" );
         sleep 1;
         ok( $imap->done($idle), "done" );
-        cmp_ok( $@, 'eq', '', "LastError not set" );
+        ok( !$@, "LastError not set" ) or diag( '$@:' . $@ );
     }
     else {
         ok( 1, "idle not supported" );
