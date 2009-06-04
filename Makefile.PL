@@ -8,6 +8,7 @@ my %optional = (
     "Authen::SASL"     => { for => "Authmechanism 'DIGEST-MD5'" },
     "Digest::HMAC_MD5" => { for => "Authmechanism 'CRAM-MD5'" },
     "Digest::MD5"      => { for => "Authmechanism 'DIGEST-MD5'" },
+    "IO::Socket::SSL"  => { for => "SSL enabled connections (Ssl => 1)" },
     "Test::Pod"        => { for => "Pod tests", ver => "1.00" },
 );
 
