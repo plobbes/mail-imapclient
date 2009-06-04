@@ -32,7 +32,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 62;
+      : plan tests    => 64;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -189,6 +189,12 @@ ok( $uid2, "copy $target2" );
 
 my @res = $imap->fetch( 1, "RFC822.TEXT" );
 ok( scalar @res, "fetch rfc822" );
+
+my $res1 = $imap->fetch_hash("RFC822.SIZE");
+is( ref($res1), "HASH", "fetch_hash(RFC822.SIZE)" );
+
+my $res2 = $imap->fetch_hash( 1, "RFC822.SIZE" );
+is( ref($res2), "HASH", "fetch_hash(1,RFC822.SIZE)" );
 
 my $h = $imap->parse_headers( 1, "Subject" );
 ok( $h, "got subject" );
