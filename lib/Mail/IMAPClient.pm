@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.18_02';
+our $VERSION = '3.18_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -851,8 +851,9 @@ sub migrate {
 
             $peer->_debug("$folder: received $fromBuffer from server");
 
-            if ( $fromBuffer =~ /^\*\s+BYE/i ) {
+            if ( $fromBuffer =~ /^(\*\s+BYE.*?)$CR?$LF/oi ) {
                 $self->State(Unconnected);
+                $self->LastError($1);
                 return undef;
             }
 
@@ -983,6 +984,7 @@ sub migrate {
         # look for "<trans> (OK|BAD|NO)"
         $self->_debug("Reading from source: expecting 'OK' response");
         $code = $self->_get_response($trans) or return undef;
+        return undef unless $code eq 'OK';
 
         # Now let's send a CRLF to the peer to signal end of APPEND cmd:
         unless ( $peer->_send_bytes( \$CRLF ) ) {
@@ -1168,10 +1170,11 @@ sub _imap_command {
               unless (
                    $! == EPIPE
                 or $! == ECONNRESET
-                or $self->LastError =~ /^(?:timeout|socket closed|\* BYE)\b/
+                or $self->LastError =~ /(?:timeout|error) waiting\b/
+                or $self->LastError =~ /(?:socket closed|\* BYE)\b/
 
-                # BUG? reconnect if caller ignored earlier errors?
-                # or $self->LastError =~ /NO not connected$/
+                # BUG? reconnect if caller ignored/missed earlier errors?
+                # or $self->LastError =~ /NO not connected/
               );
             if ( $self->reconnect ) {
                 $self->_debug("reconnect successful on try #$tries");
@@ -1254,10 +1257,7 @@ sub _imap_command_do {
     # look for "<tag> (OK|BAD|NO|$good)" (or "+..." if $good is '+')
     my $code = $self->_get_response( $tag, $good ) or return undef;
 
-    if ( $code eq 'BYE' and $string eq "$tag LOGOUT" ) {
-        return $self;
-    }
-    elsif ( $code eq 'OK' ) {
+    if ( $code eq 'OK' ) {
         return $self;
     }
     elsif ( $good and $code eq $good ) {
@@ -1282,7 +1282,7 @@ sub _get_response {
     my $qgood = ref($good) ? $good : defined($good) ? quotemeta($good) : undef;
     my @readopt = defined( $opt->{outref} ) ? ( $opt->{outref} ) : ();
 
-    my ( $count, $out, $code ) = ( $self->Count, [], undef );
+    my ( $count, $out, $code, $byemsg ) = ( $self->Count, [], undef, undef );
     until ($code) {
         my $output = $self->_read_line(@readopt) or return undef;
         $out = $output;    # keep last response just in case
@@ -1309,14 +1309,20 @@ sub _get_response {
                 $self->LastError($data) unless ( $code eq 'OK' );
             }
             elsif ( $data =~ /^\*\s+(BYE)\b/i ) {
-                $code = uc($1);
+                $code   = uc($1);
+                $byemsg = $data;
             }
         }
     }
 
     if ($code) {
         $code = uc($code) unless ( $good and $code eq $good );
-        $self->State(Unconnected) if ( $code eq 'BYE' );
+
+        # on a successful LOGOUT $code is OK not BYE
+        if ( $code eq 'BYE' ) {
+            $self->State(Unconnected);
+            $self->LastError($byemsg) if $byemsg;
+        }
     }
     elsif ( !$self->LastError ) {
         my $info = "unexpected response: " . join( " ", @$out );
@@ -1379,6 +1385,7 @@ sub _send_line {
 
         # look for "<anything> OK|NO|BAD" or "+..."
         my $code = $self->_get_response( qr(\S+), '+' ) or return undef;
+        return undef unless $code eq '+';
 
         # non-literal part continues below...
     }
@@ -1891,6 +1898,7 @@ sub get_envelope {
     $bs;
 }
 
+# fetch( [$seq_set|ALL], @msg_data_items )
 sub fetch {
     my $self = shift;
     my $what = shift || "ALL";
@@ -1936,9 +1944,8 @@ sub _split_sequence {
     # split take => sequence-set and (optional) fetch-att
     my ( $seq, @att ) = split( / /, $take, 2 );
 
-    # default to the entire sequence
-    my @seqs = ($seq);
-
+    # use the entire sequence unless Maxcommandlength is set
+    my @seqs;
     my $maxl = $self->Maxcommandlength;
     if ($maxl) {
 
@@ -1951,32 +1958,46 @@ sub _split_sequence {
         my $diff = $maxl - $clen;
         my $most = $diff > 64 ? $diff : 64;
 
-        @seqs = ( $seq =~ m/(.{1,$most})(?:,|$)/g );
+        @seqs = ( $seq =~ m/(.{1,$most})(?:,|$)/g ) if defined $seq;
         $self->_debug( "split_sequence: length($maxl-$clen) parts: ",
             $#seqs + 1 )
           if ( $#seqs != 0 );
     }
+    else {
+        push( @seqs, $seq ) if defined $seq;
+    }
     return \@seqs, @att;
 }
 
+# fetch_hash( [$seq_set|ALL], @msg_data_items, [\%msg_by_ids] )
 sub fetch_hash {
     my $self  = shift;
     my $uids  = ref $_[-1] ? pop @_ : {};
     my @words = @_;
-    my $what  = join ' ', @_;
+
+    # take an optional leading list of messages argument or default to
+    # ALL let fetch turn that list of messages into a msgref as needed
+    # fetch has similar logic for dealing with message list
+    my $msgs = 'ALL';
+    if ( $words[0] ) {
+        if ( $words[0] eq 'ALL' || ref $words[0] ) {
+            $msgs = shift @words;
+        }
+        elsif ( $words[0] =~ s/^([,:\d]+)\s*// ) {
+            $msgs = $1;
+            shift @words if $words[0] eq "";
+        }
+    }
+
+    # message list (if any) is now removed from @words
+    my $what = join ' ', @words;
 
     for (@words) {
         s/([\( ])FAST([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE$2/i;
 s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
 
-    my $msgref = $self->messages;
-    return undef unless defined $msgref;
-
-    my $output = [];
-    if ($msgref) {
-        $output = $self->fetch( $msgref, "($what)" ) or return undef;
-    }
+    my $output = $self->fetch( $msgs, "($what)" ) or return undef;
 
     for ( my $x = 0 ; $x <= $#$output ; $x++ ) {
         my $entry = {};
@@ -2785,6 +2806,7 @@ sub append_file {
     }
 }
 
+# BUG? we should retry if "socket closed while..." but do not currently
 sub authenticate {
     my ( $self, $scheme, $response ) = @_;
     $scheme   ||= $self->Authmechanism;
