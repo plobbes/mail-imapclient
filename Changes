@@ -3,6 +3,12 @@
 Changes from 3.17_01 to ?       made by Phil Lobbes
 Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
+	- Potential compatibility issues from 3.17+ highlighted with '*'
+
+version 3.18: Wed Jun  3 23:07:12 EDT 2009
+	- enhance fetch_hash to enable caller to specify list of messages
+	  suggestion by [Eugene Mamaev]
+	- better handling of untagged BYE response
 
 version 3.18_02: Wed May 27 10:02:24 EDT 2009
 	- *new attribute Ssl, when true causes IO::Socket::SSL to be
@@ -36,7 +42,6 @@ version 3.17: Thu May 21 01:40:08 EDT 2009
 	- update Makefile.PL to provide info about optional modules
 
 version 3.17_05: Tue May 19 11:04:28 EDT 2009
-	Potential compatibility issues highlighted with '*':
 	- *reset LastError for every call to _imap_command_do()
 	- *run() - use _imap_command_do(), return arrayref in scalar context
 	- *tag_and_run() - return arrayref in scalar context
