@@ -1079,6 +1079,10 @@ expunges and which likewise doesn't technically exist.
 
 =head2 fetch
 
+Usage:
+
+  $imap->fetch( [$seq_set|ALL], @msg_data_items )
+
 Example:
 
   my $output = $imap->fetch(@args) or die "Could not fetch: $@\n";
@@ -1107,6 +1111,10 @@ B<fetch> returns C<undef> on failure.  Inspect L</LastError> or C<$@>
 for an explanation of your error.
 
 =head2 fetch_hash
+
+Usage:
+
+  $imap->fetch_hash( [$seq_set|ALL], @msg_data_items, [\%msg_by_ids] )
 
 Example:
 
