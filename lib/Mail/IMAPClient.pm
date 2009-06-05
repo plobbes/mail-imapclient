@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.18_03';
+our $VERSION = '3.19_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2231,6 +2231,11 @@ sub parse_headers {
     my %fieldmap = map { ( lc($_) => $_ ) } @fields;
     my $msgid;
 
+    # some example responses:
+    # * OK Message 1 no longer exists
+    # * 1 FETCH (UID 26535 BODY[HEADER] "")
+    # * 5 FETCH (UID 30699 BODY[HEADER] {1711}
+    # header: value...
     foreach my $header ( map { split /$CR?$LF/o } @$raw ) {
 
         # little problem: Windows2003 has UID as body, not in header
@@ -2238,7 +2243,7 @@ sub parse_headers {
             $header =~ s/^\* \s+ (\d+) \s+ FETCH \s+
                         \( (.*?) BODY\[HEADER (?:\.FIELDS)? .*? \]\s*//ix
           )
-        {           # start new message header
+        {    # start new message header
             ( $msgid, my $msgattrs ) = ( $1, $2 );
             $h = {};
             if ( $self->Uid )    # undef when win2003
@@ -2262,7 +2267,6 @@ sub parse_headers {
         }
 
         unless ( defined $h ) {
-            last if $header =~ / OK /i;
             $self->_debug("found data between fetch headers: $header");
             next;
         }
@@ -2273,6 +2277,12 @@ sub parse_headers {
         }
         elsif ( $field and ref $h->{$field} eq 'ARRAY' ) {    # folded header
             $h->{$field}[-1] .= $header;
+        }
+        else {
+
+            # show data if it is not like  '"")' or '{123}'
+            $self->_debug("non-header data between fetch headers: $header")
+              if ( $header !~ /^(?:\s*\"\"\)|\{\d+\})$CR?$LF$/o );
         }
     }
 
