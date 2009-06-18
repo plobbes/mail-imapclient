@@ -2093,8 +2093,12 @@ Example:
       warn "Error in search: $@\n" if $@;
   }
 
-  # or
+  # or  note: be sure to quote string properly
   my $msgs2 = $imap->search( \( $imap->Quote($msgid), "FROM", q{"me"} ) )
+    or warn "search failed: $@\n";
+
+  # or  note: be sure to quote string properly
+  my $msgs3 = $imap->search('TEXT "string not in mailbox"')
     or warn "search failed: $@\n";
 
 The B<search> method implements the SEARCH IMAP client command.  Any
@@ -2113,9 +2117,22 @@ following:
     TEXT TO UID UNANSWERED UNDELETED UNDRAFT UNFLAGGED
     UNKEYWORD UNSEEN
 
-To avoid the automatic quoting, you can specify args as scalar
-references (SCALAR) and the values of those SCALAR refs will be passed
-along as-is.
+The following options exist to avoid the automatic quoting (note:
+caller is responsible for verifying the data sent in these cases is
+properly escaped/quoted):
+
+=over 4
+
+=item *
+
+specify a single string/argument in the call to search.
+
+=item *
+
+specify args as scalar references (SCALAR) and the values of those
+SCALAR refs will be passed along as-is.
+
+=back
 
 The B<search> method returns an array containing sequence numbers of
 messages that passed the SEARCH IMAP client command's search criteria.
