@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.19_01';
+our $VERSION = '3.19';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -450,7 +450,16 @@ sub _list_or_lsub {
     $self->_imap_command(qq($cmd "$reference" $target))
       or return undef;
 
-    return wantarray ? $self->History : $self->Results;
+    # cleanup any literal data that may be returned
+    my $ret = wantarray ? [ $self->History ] : $self->Results;
+    if ($ret) {
+        my $cmd = wantarray ? shift @$ret : undef;
+        $self->_list_response_preprocess($ret);
+        unshift( @$ret, $cmd ) if defined($cmd);
+    }
+
+    #return wantarray ? $self->History : $self->Results;
+    return wantarray ? @$ret : $ret;
 }
 
 sub list { shift->_list_or_lsub( "LIST", @_ ) }
@@ -486,8 +495,6 @@ sub _folders_or_subscribed {
                 shift @$tref;        # remove command
                 push @list, @$tref;
             }
-
-            $self->_list_response_preprocess( \@list );    # necessary? remove?
 
             foreach my $resp (@list) {
                 my $rec = $self->_list_or_lsub_response_parse($resp);
@@ -1368,28 +1375,25 @@ sub _record {
     push @{ $self->{History}{$count} }, $array;
 }
 
-#_send_line writes to the socket:
+# _send_line handles literal data and supports the Prewritemethod
 sub _send_line {
     my ( $self, $string, $suppress ) = ( shift, shift, shift );
 
-    $string =~ s/\r?\n?$/$CRLF/o
+    $string =~ s/$CR?$LF?$/$CRLF/o
       unless $suppress;
 
-    if ( $string =~ s/^([^\n{]*\{(\d+)\}$CRLF)(.)/$3/o ) {
-
-        # string starts with literal
-        my ( $first, $len ) = ( $1, $2 );
+    # handle case where string contains a literal
+    if ( $string =~ s/^([^$LF{]*\{\d+\}$CRLF)//o ) {
+        my $first = $1;
         $self->_debug("Sending literal: $first\tthen: $string");
-
         $self->_send_line($first) or return undef;
 
         # look for "<anything> OK|NO|BAD" or "+..."
         my $code = $self->_get_response( qr(\S+), '+' ) or return undef;
         return undef unless $code eq '+';
-
-        # non-literal part continues below...
     }
 
+    # non-literal part continues...
     unless ( $self->IsConnected ) {
         $self->LastError("NO not connected");
         return undef;
@@ -1758,6 +1762,8 @@ sub _disconnect {
 # LIST or LSUB Response
 #   Contents: name attributes, hierarchy delimiter, name
 #   Example: * LIST (\Noselect) "/" ~/Mail/foo
+# NOTE: in _list_response_preprocess we append literal data so we need
+# to be liberal about our matching of folder name data
 sub _list_or_lsub_response_parse {
     my ( $self, $resp ) = @_;
 
@@ -1766,10 +1772,10 @@ sub _list_or_lsub_response_parse {
 
     $resp =~ s/\015?\012$//;
     if (
-        $resp =~ / ^\* \s+ (?:LIST|LSUB) \s+
-              \( ([^\)]*) \)          \s+   # * LIST (attrs)
-           (?:\" ([^"]*)  \" | NIL  ) \s+   # "delimiter" or NIL
-           (?:\" (.*)     \" | (\S+))       # "name" or name
+        $resp =~ / ^\* \s+ (?:LIST|LSUB) \s+   # * LIST or LSUB
+                 \( ([^\)]*) \)          \s+   # (attrs)
+           (?:   \" ([^"]*)  \" | NIL  ) \s    # "delimiter" or NIL
+           (?:\s*\" (.*)     \" | (.*) )       # "name" or name
          /ix
       )
     {
@@ -1779,18 +1785,19 @@ sub _list_or_lsub_response_parse {
     return wantarray ? %info : \%info;
 }
 
-# BUG? Legacy code does this for subscribed() and folders(). Is there
-# a case where lines returned by the server do not end in $CRLF and we
-# need to treat them as a continuation of the previous line?
+# handle listeral data returned in list/lsub responses
+# some example responses:
+# * LIST () "/" "My Folder"    # nothing to do here...
+# * LIST () "/" {9}            # the {9} is already removed by _read_line()
+# Special %                    # we append this to the previous line
 sub _list_response_preprocess {
     my ( $self, $data ) = @_;
     return undef unless defined $data;
 
     for ( my $m = 0 ; $m < @$data ; $m++ ) {
         if ( $data->[$m] && $data->[$m] !~ /$CRLF$/o ) {
-            local ($!);    # old versions of Carp could reset $!
-            carp("concatenating $data->[$m] and $data->[$m+1]");
-            $data->[$m] .= $data->[ $m + 1 ];
+            $self->_debug("concatenating '$data->[$m]' and '$data->[$m+1]'");
+            $data->[$m] .= " " . $data->[ $m + 1 ];
             splice @$data, $m + 1, 1;
         }
     }
@@ -2420,11 +2427,12 @@ sub _quote_search {
 }
 
 sub search {
-    my ( $self, @a ) = @_;
+    my ( $self, @args ) = @_;
 
-    @a = $self->_quote_search(@a);
+    # backwards compatibility: caller must quoting single args properly
+    @args = $self->_quote_search(@args) if @args > 1;
 
-    $self->_imap_uid_command( SEARCH => @a )
+    $self->_imap_uid_command( SEARCH => @args )
       or return undef;
 
     my @hits;
@@ -2628,9 +2636,6 @@ sub internaldate {
 sub is_parent {
     my ( $self, $folder ) = ( shift, shift );
     my $list = $self->list( undef, $folder ) or return undef;
-
-    shift @$list;                               # remove command
-    $self->_list_response_preprocess($list);    # necessary? remove?
 
     my $attrs;
     foreach my $resp (@$list) {
