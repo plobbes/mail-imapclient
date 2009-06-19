@@ -453,7 +453,7 @@ sub _list_or_lsub {
     # cleanup any literal data that may be returned
     my $ret = wantarray ? [ $self->History ] : $self->Results;
     if ($ret) {
-        my $cmd = wantarray ? shift @$ret : undef;
+        my $cmd = wantarray ? undef : shift @$ret;
         $self->_list_response_preprocess($ret);
         unshift( @$ret, $cmd ) if defined($cmd);
     }
@@ -515,14 +515,14 @@ sub folders {
       if !$what && $self->{Folders};
 
     my @folders = $self->_folders_or_subscribed( "list", $what );
-
     $self->{Folders} = \@folders unless $what;
     return wantarray ? @folders : \@folders;
 }
 
 sub subscribed {
     my ( $self, $what ) = @_;
-    $self->_folders_or_subscribed( "lsub", $what );
+    my @folders = $self->_folders_or_subscribed( "lsub", $what );
+    return wantarray ? @folders : \@folders;
 }
 
 # BUG? cleanup escaping/quoting
@@ -1383,7 +1383,7 @@ sub _send_line {
       unless $suppress;
 
     # handle case where string contains a literal
-    if ( $string =~ s/^([^$LF{]*\{\d+\}$CRLF)//o ) {
+    if ( $string =~ s/^([^$LF\{]*\{\d+\}$CRLF)(?=.)//o ) {
         my $first = $1;
         $self->_debug("Sending literal: $first\tthen: $string");
         $self->_send_line($first) or return undef;
@@ -1654,7 +1654,7 @@ sub _read_line {
         }
     }
 
-    $self->_debug( "Read: " . join "\n      ", map { $_->[DATA] } @$oBuffer );
+    $self->_debug( "Read: " . join "", map { "\t" . $_->[DATA] } @$oBuffer );
     @$oBuffer ? $oBuffer : undef;
 }
 
@@ -1795,7 +1795,7 @@ sub _list_response_preprocess {
     return undef unless defined $data;
 
     for ( my $m = 0 ; $m < @$data ; $m++ ) {
-        if ( $data->[$m] && $data->[$m] !~ /$CRLF$/o ) {
+        if ( $data->[$m] && $data->[$m] !~ /$CR?$LF$/o ) {
             $self->_debug("concatenating '$data->[$m]' and '$data->[$m+1]'");
             $data->[$m] .= " " . $data->[ $m + 1 ];
             splice @$data, $m + 1, 1;
@@ -2419,6 +2419,9 @@ sub _quote_search {
         elsif ( exists $SEARCH_KEYS{ uc($_) } ) {
             push( @ret, $v );
         }
+        elsif ( @args == 1 ) {
+            push( @ret, $v );    # <3.17 compat: caller responsible for quoting
+        }
         else {
             push( @ret, $self->Quote($v) );
         }
@@ -2429,8 +2432,7 @@ sub _quote_search {
 sub search {
     my ( $self, @args ) = @_;
 
-    # backwards compatibility: caller must quoting single args properly
-    @args = $self->_quote_search(@args) if @args > 1;
+    @args = $self->_quote_search(@args);
 
     $self->_imap_uid_command( SEARCH => @args )
       or return undef;
