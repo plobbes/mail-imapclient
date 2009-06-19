@@ -5,9 +5,11 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.19: Thu Jun 18 10:44:11 EDT 2009
+version 3.19: Fri Jun 19 14:59:15 EDT 2009
 	- *search() backwards compat: caller must quote single arg properly
 	  rt.cpan.org#47044: $imap->search does not return [ekuemmer]
+	- cleanup regexp in _send_line()
+	- reduce extra newlines injected by _debug()
 
 version 3.19_02: Tue Jun  9 00:47:52 EDT 2009
 	- _list_or_lsub() now calls _list_response_preprocess so
