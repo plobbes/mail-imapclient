@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.19';
+our $VERSION = '3.20_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -367,7 +367,8 @@ sub login {
 
     return undef unless ( defined($passwd) and defined($id) );
 
-    if ( $passwd =~ m/\W/ ) {    # need to quote
+    # BUG: should use Quote() with $passwd and $id
+    if ( $passwd eq "" or $passwd =~ m/\W/ ) {
         $passwd =~ s/(["\\])/\\$1/g;
         $passwd = qq("$passwd");
     }
