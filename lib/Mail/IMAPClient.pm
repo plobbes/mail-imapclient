@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.20_01';
+our $VERSION = '3.20_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -139,10 +139,11 @@ my @dow = qw(Sun Mon Tue Wed Thu Fri Sat);
 my @mnt = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
 sub Rfc822_date {
-    my $class = shift;    #Date: Fri, 09 Jul 1999 13:10:55 -0000#
+    my $class = shift;
     my $date = $class =~ /^\d+$/ ? $class : shift;    # method or function?
-    my @date = gmtime $date;
+    my @date = gmtime($date);
 
+    #Date: Fri, 09 Jul 1999 13:10:55 -0000
     sprintf(
         "%s, %02d %s %04d %02d:%02d:%02d -%04d",
         $dow[ $date[6] ],
@@ -154,19 +155,29 @@ sub Rfc822_date {
 }
 
 # The following methods create valid dates for use in IMAP search strings
+# - provide Rfc2060* methods/functions for backwards compatibility
 sub Rfc2060_date {
-    my $class = shift;                                 # 11-Jan-2000
-    my $stamp = $class =~ /^\d+$/ ? $class : shift;    # method or function
-    my @date  = gmtime $stamp;
+    $_[0] =~ /^\d+$/ ? Rfc3501_date(@_) : shift->Rfc3501_date(@_);
+}
+sub Rfc3501_date {
+    my $class = shift;
+    my $stamp = $class =~ /^\d+$/ ? $class : shift;
+    my @date  = gmtime($stamp);
 
+    # 11-Jan-2000
     sprintf( "%02d-%s-%04d", $date[3], $mnt[ $date[4] ], $date[5] + 1900 );
 }
 
 sub Rfc2060_datetime($;$) {
-    my ( $class, $stamp, $zone ) = @_;    # 11-Jan-2000 04:04:04 +0000
-    $zone ||= '+0000';
-    my @date = gmtime $stamp;
+    $_[0] =~ /^\d+$/ ? Rfc3501_datetime(@_) : shift->Rfc3501_datetime(@_);
+}
+sub Rfc3501_datetime($;$) {
+    my $class = shift;
+    my $stamp = $class =~ /^\d+$/ ? $class : shift;
+    my $zone  = shift || '+0000';
+    my @date  = gmtime($stamp);
 
+    # 11-Jan-2000 04:04:04 +0000
     sprintf(
         "%02d-%s-%04d %02d:%02d:%02d %s",
         $date[3],
