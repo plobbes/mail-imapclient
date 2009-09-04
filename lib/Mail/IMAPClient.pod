@@ -1269,6 +1269,76 @@ Notice that if you just want to list a folder's subfolders (and not
 the folder itself), then you need to include the hierarchy separator
 character (as returned by the L</separator> method).
 
+=head2 xlist_folders
+
+Example:
+
+  my $xlist = $imap->xlist_folders
+    or die "Could not get xlist folders.\n";
+
+IMAP servers implementing the XLIST extension (such as Gmail)
+designate particular folders to be used for particular functions.
+This is useful in the case where you want to know which folder should
+be used for Trash when the actual folder name can't be predicted
+(e.g. in the case of Gmail, the folder names change depending on the
+user's locale settings).
+
+The B<xlist_folders> method returns a hash listing any "xlist" folder
+names, with the values listing the actual folders that should be used
+for those names.  For example, using this method with a Gmail user
+using the English (US) locale might give this output from
+L<Data::Dumper>:
+
+  $VAR1 = {
+      'Inbox'   => 'Inbox',
+      'AllMail' => '[Gmail]/All Mail',
+      'Trash'   => '[Gmail]/Trash',
+      'Drafts'  => '[Gmail]/Drafts',
+      'Sent'    => '[Gmail]/Sent Mail',
+      'Spam'    => '[Gmail]/Spam',
+      'Starred' => '[Gmail]/Starred'
+  };
+
+The same list for a user using the French locale might look like this:
+
+  $VAR1 = {
+      'Inbox'   => 'Bo&AO4-te de r&AOk-ception',
+      'AllMail' => '[Gmail]/Tous les messages',
+      'Trash'   => '[Gmail]/Corbeille',
+      'Drafts'  => '[Gmail]/Brouillons',
+      'Sent'    => '[Gmail]/Messages envoy&AOk-s',
+      'Spam'    => '[Gmail]/Spam',
+      'Starred' => '[Gmail]/Suivis'
+  };
+
+Mail::IMAPClient recognizes the following "xlist" folder names:
+
+=over 4
+
+=item Inbox
+
+=item AllMail
+
+=item Trash
+
+=item Drafts
+
+=item Sent
+
+=item Spam
+
+=item Starred
+
+=back
+
+These are currently the only ones supported by Gmail.  The XLIST
+extension is not documented, and there are no other known
+implementations other than Gmail, so this list is based on what Gmail
+provides.
+
+If the server does not support the XLIST extension, this method
+returns undef.
+
 =head2 has_capability
 
 Example:
@@ -2522,6 +2592,9 @@ B<uidexpunge> returns an array or arrayref (scalar context) of output
 lines returned from the UID EXPUNGE command.
 
 B<uidexpunge> returns undef on failure.
+
+If the server does not support the UIDPLUS extension, this method
+returns undef.
 
 =head2 uidnext
 

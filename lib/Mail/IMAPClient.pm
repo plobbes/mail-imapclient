@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.20_01';
+our $VERSION = '3.20_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -479,6 +479,12 @@ sub _list_or_lsub {
 sub list { shift->_list_or_lsub( "LIST", @_ ) }
 sub lsub { shift->_list_or_lsub( "LSUB", @_ ) }
 
+sub xlist {
+    my ($self) = @_;
+    return undef unless $self->has_capability("XLIST");
+    shift->_list_or_lsub( "XLIST", @_ );
+}
+
 sub _folders_or_subscribed {
     my ( $self, $method, $what ) = @_;
     my @folders;
@@ -531,6 +537,25 @@ sub folders {
     my @folders = $self->_folders_or_subscribed( "list", $what );
     $self->{Folders} = \@folders unless $what;
     return wantarray ? @folders : \@folders;
+}
+
+sub xlist_folders {
+    my ($self) = @_;
+    my $xlist = $self->xlist;
+    return undef unless defined $xlist;
+
+    my %xlist;
+    my $xlist_re = qr/\A\\(Inbox|AllMail|Trash|Drafts|Sent|Spam|Starred)\Z/;
+
+    for my $resp (@$xlist) {
+        my $rec = $self->_list_or_lsub_response_parse($resp);
+        next unless defined $rec->{name};
+        for my $attr ( @{ $rec->{attrs} } ) {
+            $xlist{$1} = $rec->{name} if ( $attr =~ $xlist_re );
+        }
+    }
+
+    return wantarray ? %xlist : \%xlist;
 }
 
 sub subscribed {
@@ -1773,7 +1798,7 @@ sub _disconnect {
     $self;
 }
 
-# LIST or LSUB Response
+# LIST/XLIST/LSUB Response
 #   Contents: name attributes, hierarchy delimiter, name
 #   Example: * LIST (\Noselect) "/" ~/Mail/foo
 # NOTE: in _list_response_preprocess we append literal data so we need
@@ -1786,10 +1811,10 @@ sub _list_or_lsub_response_parse {
 
     $resp =~ s/\015?\012$//;
     if (
-        $resp =~ / ^\* \s+ (?:LIST|LSUB) \s+   # * LIST or LSUB
-                 \( ([^\)]*) \)          \s+   # (attrs)
-           (?:   \" ([^"]*)  \" | NIL  ) \s    # "delimiter" or NIL
-           (?:\s*\" (.*)     \" | (.*) )       # "name" or name
+        $resp =~ / ^\* \s+ (?:LIST|XLIST|LSUB) \s+ # * LIST|XLIST|LSUB
+                 \( ([^\)]*) \)                \s+ # (attrs)
+           (?:   \" ([^"]*)  \" | NIL  )       \s  # "delimiter" or NIL
+           (?:\s*\" (.*)     \" | (.*) )           # "name" or name
          /ix
       )
     {
@@ -2133,6 +2158,8 @@ sub expunge {
 
 sub uidexpunge {
     my ( $self, $msgspec ) = ( shift, shift );
+
+    return undef unless $self->has_capability("UIDPLUS");
 
     my $msg =
       UNIVERSAL::isa( $msgspec, 'Mail::IMAPClient::MessageSet' )
