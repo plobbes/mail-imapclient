@@ -6,6 +6,7 @@ Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
 version 3.20_01: Fri Sep  4 16:44:47 EDT 2009
+	- rt.cpan.org#49024: NIL personal name returned by *_addresses methods
 	- rt.cpan.org#49401: IMAPClient expunge fails (unless folder arg used)
 
 version 3.20: Fri Aug 21 17:40:40 EDT 2009
