@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.20';
+our $VERSION = '3.20_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -140,8 +140,8 @@ my @mnt = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
 
 sub Rfc822_date {
     my $class = shift;
-    my $date = $class =~ /^\d+$/ ? $class : shift;    # method or function?
-    my @date = gmtime($date);
+    my $date  = $class =~ /^\d+$/ ? $class : shift;    # method or function?
+    my @date  = gmtime($date);
 
     #Date: Fri, 09 Jul 1999 13:10:55 -0000
     sprintf(
@@ -159,6 +159,7 @@ sub Rfc822_date {
 sub Rfc2060_date {
     $_[0] =~ /^\d+$/ ? Rfc3501_date(@_) : shift->Rfc3501_date(@_);
 }
+
 sub Rfc3501_date {
     my $class = shift;
     my $stamp = $class =~ /^\d+$/ ? $class : shift;
@@ -171,6 +172,7 @@ sub Rfc3501_date {
 sub Rfc2060_datetime($;$) {
     $_[0] =~ /^\d+$/ ? Rfc3501_datetime(@_) : shift->Rfc3501_datetime(@_);
 }
+
 sub Rfc3501_datetime($;$) {
     my $class = shift;
     my $stamp = $class =~ /^\d+$/ ? $class : shift;
@@ -1337,7 +1339,7 @@ sub _get_response {
     if ($code) {
         $code = uc($code) unless ( $good and $code eq $good );
 
-        # on a successful LOGOUT $code is OK not BYE
+        # on successful LOGOUT $code is OK (not BYE!) see RFC 3501 sect 7.1.5
         if ( $code eq 'BYE' ) {
             $self->State(Unconnected);
             $self->LastError($byemsg) if $byemsg;
@@ -2111,8 +2113,11 @@ sub close {
 sub expunge {
     my ( $self, $folder ) = @_;
 
-    my $old = $self->Folder || '';
-    if ( defined $folder && $folder eq $old ) {
+    return undef unless ( defined $folder or defined $self->Folder );
+
+    my $old = defined $self->Folder ? $self->Folder : '';
+
+    if ( !defined($folder) || $folder eq $old ) {
         $self->_imap_command('EXPUNGE')
           or return undef;
     }
