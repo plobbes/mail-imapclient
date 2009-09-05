@@ -754,16 +754,14 @@ Example:
 
   $imap->close or die "Could not close: $@\n";
 
-The B<close> method is implemented via the default method and is used
-to close the currently selected folder via the CLOSE IMAP client
-command.  According to RFC3501, the CLOSE command performs an implicit
-EXPUNGE, which means that any messages that you've flagged as
-I<\Deleted> (say, with the L</delete_message> method) will now be
-deleted.  If you haven't deleted any messages then B<close> can be
-thought of as an "unselect".
+The B<close> method is used to close the currently selected folder via
+the CLOSE IMAP client command.  According to RFC3501, the CLOSE
+command performs an implicit EXPUNGE, which means that any messages
+that are flagged as I<\Deleted> (i.e. with the L</delete_message>
+method) will now be deleted.  If you haven't deleted any messages then
+B<close> can be thought of as an "unselect".
 
-Note again that this closes the currently selected folder, not the
-IMAP session.
+Note: this closes the currently selected folder, not the IMAP session.
 
 See also L</delete_message>, L</expunge>, and RFC3501.
 
@@ -1063,19 +1061,14 @@ Example:
 
 The B<expunge> method accepts one optional argument, a folder name.
 It expunges the folder specified as the argument, or the currently
-selected folder if no argument is supplied.
+selected folder (if any) when no argument is supplied.
 
 Although RFC3501 does not permit optional arguments (like a folder
-name) to the EXPUNGE client command, the L</expunge> method does,
-which is especially interesting given that the L</expunge> method
-doesn't technically exist.  In case you're curious, expunging a folder
-deletes the messages that you thought were already deleted via
-L</delete_message> but really weren't, which means you have to use a
-method that doesn't exist to delete messages that you thought didn't
-exist.  (Seriously, I'm not making any of this stuff up.)
+name) to the EXPUNGE client command, the L</expunge> method does.
+Note: expunging a folder deletes the messages that have the \Deleted
+flag set (i.e. messages flagged via L</delete_message>).
 
-Or you could use the L</close> method, which deselects as well as
-expunges and which likewise doesn't technically exist.
+See also the L</close> method, which "deselects" as well as expunges.
 
 =head2 fetch
 

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.20_02';
+our $VERSION = '3.21_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2149,8 +2149,9 @@ sub expunge {
     else {
         $self->select($folder) or return undef;
         my $succ = $self->_imap_command('EXPUNGE');
-        $self->select($old) or return undef;    # BUG? this should be fatal?
-        $succ or return undef;
+
+        # if $old eq '' IMAP4 select should close $folder without EXPUNGE
+        return undef unless ( $self->select($old) and $succ );
     }
 
     return wantarray ? $self->History : $self->Results;
