@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.21_02';
+our $VERSION = '3.21';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2042,55 +2042,84 @@ sub fetch_hash {
         s/([\( ])FAST([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE$2/i;
 s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
+    my %words = map { uc($_) => 1 } @words;
 
     my $output = $self->fetch( $msgs, "($what)" ) or return undef;
 
-    for ( my $x = 0 ; $x <= $#$output ; $x++ ) {
-        my $entry = {};
-        my $l     = $output->[$x];
+    while ( my $l = shift @$output ) {
+        next if $l !~ m/^\*\s(\d+)\sFETCH\s\(/g;
+        my ( $mid, $entry ) = ( $1, {} );
+        my ( $key, $value );
+      ATTR:
+        while ( $l !~ m/\G\s*\)\s*$/gc ) {
+            if ( $l =~ m/\G\s*([\w\d\.]+(?:\[[^\]]*\])?)\s*/gc ) {
+                $key = uc($1);
+            }
+            elsif ( !defined $key ) {
+
+                # some kind of malformed response
+                $self->LastError("Invalid item name in FETCH response: $l");
+                return undef;
+            }
+
+            if ( $l =~ m/\G\s*$/gc ) {
+                $value         = shift @$output;
+                $entry->{$key} = $value;
+                $l             = shift @$output;
+                next ATTR;
+            }
+            elsif ( $l =~ m/\G(?:"([^"]+)"|([^()\s]+))\s*/gc ) {
+                $value = defined $1 ? $1 : $2;
+                $entry->{$key} = $value;
+                next ATTR;
+            }
+            elsif ( $l =~ m/\G\(/gc ) {
+                my $depth = 1;
+                $value = "";
+                while ( $l =~ m/\G(\(|\)|[^()]+)/gc ) {
+                    my $stuff = $1;
+                    if ( $stuff eq "(" ) {
+                        $depth++;
+                        $value .= "(";
+                    }
+                    elsif ( $stuff eq ")" ) {
+                        $depth--;
+                        if ( $depth == 0 ) {
+                            $entry->{$key} = $value;
+                            next ATTR;
+                        }
+                        $value .= ")";
+                    }
+                    else {
+                        $value .= $stuff;
+                    }
+                }
+                m/\G\s*/gc;
+            }
+            else {
+                $self->LastError("Invalid item value in FETCH response: $l");
+                return undef;
+            }
+        }
 
         if ( $self->Uid ) {
-            my $uid = $l =~ /\bUID\s+(\d+)/i ? $1 : undef;
-            $uid or next;
-
-            if ( $uids->{$uid} ) { $entry = $uids->{$uid} }
-            else                 { $uids->{$uid} ||= $entry }
+            $uids->{ $entry->{UID} } = $entry;
         }
         else {
-            my $mid = $l =~ /^\* (\d+) FETCH/i ? $1 : undef;
-            $mid or next;
-
-            if ( $uids->{$mid} ) { $entry = $uids->{$mid} }
-            else                 { $uids->{$mid} ||= $entry }
+            $uids->{$mid} = $entry;
         }
 
-        foreach my $w (@words) {
-            if ( $l =~ /\Q$w\E\s*$/i ) {
-                $entry->{$w} = $output->[ $x + 1 ];
-                $entry->{$w} =~ s/(?:$CR?$LF)+$//og;
-                chomp $entry->{$w};
+        for my $word ( keys %$entry ) {
+            next if exists $words{$word};
+
+            if ( my ($stuff) = $word =~ m/^BODY(\[.*)$/ ) {
+                next if exists $words{ "BODY.PEEK" . $stuff };
             }
-            elsif (
-                $l =~ /\(  # open paren followed by ...
-                (?:.*\s)?  # ...optional stuff and a space
-                \Q$w\E\s   # escaped fetch field<sp>
-                (?:"       # then: a dbl-quote
-                  (\\.|    # then bslashed anychar(s) or ...
-                   [^"]+)  # ... nonquote char(s)
-                "|         # then closing quote; or ...
-                \(         # ...an open paren
-                  ([^\)]*) # ... non-close-paren char(s)
-                \)|        # then closing paren; or ...
-                (\S+))     # unquoted string
-                (?:\s.*)?  # possibly followed by space-stuff
-                \)         # close paren
-               /xi
-              )
-            {
-                $entry->{$w} = defined $1 ? $1 : defined $2 ? $2 : $3;
-            }
+
+            delete $entry->{$word};
         }
     }
+
     return wantarray ? %$uids : $uids;
 }
 

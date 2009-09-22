@@ -1161,27 +1161,12 @@ This would result in L<Data::Dumper> output similar to the following:
               }
      };
 
-You can specify I<BODY[HEADER.FIELDS ($fieldlist)> as an argument, but
-you should keep the following in mind if you do:
-
-B<1.> You can only specify one argument of this type per call.  If you
-need multiple fields, then you'll have to call B<fetch_hashref>
-multiple times, each time specifying a different FETCH attribute but
-the same.
-
-B<2.> Fetch operations that return RFC822 message headers return the
-whole header line, including the field name and the colon.  For
-example, if you do a C<$imap-E<gt>fetch_hash("BODY[HEADER.FIELDS
-(Subject)]")>, you will get back subject lines that start with
-"Subject: ".
-
-By itself this method may be useful for, say, speeding up programs
-that want the size of every message in a folder.  It issues one
-command and receives one (possibly long!) response from the server.
-However, it's true power lies in the as-yet-unwritten methods that
-will rely on this method to deliver even more powerful result hashes
-(and which may even remove the restrictions mentioned in B<1> and
-B<2>, above).  Look for more new function in later releases.
+By itself this method may be useful for, say, speeding up programs that
+want the size of every message in a folder.  It issues one command and
+receives one (possibly long!) response from the server.  However, it's
+true power lies in the as-yet-unwritten methods that will rely on this
+method to deliver even more powerful result hashes.  Look for more new
+function in later releases.
 
 This method is new with version 2.2.3 and is thus still experimental.
 If you decide to try this method and run into problems, please see the
