@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.21';
+our $VERSION = '3.22_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -66,7 +66,7 @@ BEGIN {
         Maxcommandlength Maxtemperrors Password Peek Port
         Prewritemethod Proxy Ranges Readmethod Reconnectretry
         Server Showcredentials State Supportedflags Timeout Uid
-        User Ssl)
+        User Ssl Starttls)
       )
     {
         no strict 'refs';
@@ -101,7 +101,7 @@ sub LastError {
 sub Fast_io(;$) {
     my ( $self, $use ) = @_;
     defined $use
-      or return $self->{File_io};
+      or return $self->{Fast_io};
 
     my $socket = $self->{Socket}
       or return undef;
@@ -366,7 +366,58 @@ sub Socket($) {
         return $self;
     }
 
+    if ( $self->Starttls ) {
+        $self->starttls or return undef;
+    }
+
     $self->User && $self->Password ? $self->login : $self;
+}
+
+# RFC2595 section 3.1
+sub starttls {
+    my ($self) = @_;
+
+    # RFC requirement checks commented out for now...
+    #if ( $self->IsUnconnected or $self->IsAuthenticated ) {
+    #    $self->LastError("NO must be connected but not authenticated");
+    #    return undef;
+    #}
+
+    return undef unless $self->has_capability("STARTTLS");
+
+    $self->_imap_command("STARTTLS") or return undef;
+
+    # MUST discard cached capability info; should re-issue capability command
+    delete $self->{CAPABILITY};
+
+    my $ioclass = "IO::Socket::SSL";
+    eval "require $ioclass";
+    if ($@) {
+        $self->LastError("Unable to load '$ioclass' for starttls: $@");
+        return undef;
+    }
+
+    my $sock     = $self->RawSocket;
+    my $blocking = $sock->blocking;
+
+    # force blocking for now
+    $sock->blocking(1);
+
+    # give caller control of args to start_SSL if desired
+    my @sslargs =
+        ( $self->Starttls and ref( $self->Starttls ) eq "ARRAY" )
+      ? ( @${ $self->Starttls } )
+      : ( Timeout => 30 );
+
+    unless ( IO::Socket::SSL->start_SSL( $sock, @sslargs ) ) {
+        $self->LastError("Unable to start TLS: $@");
+        return undef;
+    }
+
+    # return blocking to previous setting
+    $sock->blocking($blocking);
+
+    return $self;
 }
 
 sub login {

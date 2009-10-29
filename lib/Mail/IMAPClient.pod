@@ -171,7 +171,8 @@ L</connect> method, but if you are implementing an advanced
 authentication technique you may choose to set up your own socket
 connection and then set this parameter manually, bypassing the
 B<connect> method completely.  This is also useful if you want to use
-L<IO::Socket::INET> alternatives, like L<IO::Socket::SSL>.
+L<IO::Socket::INET> alternatives like L<IO::Socket::SSL> and need full
+control.
 
 L</RawSocket> simply gets/sets the socket without attempting any
 interaction on it.  In this case, you have to be sure to handle all
@@ -182,10 +183,9 @@ L</State> parameter).
 
 Unlike L</RawSocket>, L</Socket> attempts to carry on preliminary
 connection phases if the conditions apply.  If both parameters are
-present, this takes the precedence over L</RawSocket>.  It is primarily
-used to provide an alternative socket for communications, e.g. to use
-L<IO::Socket::SSL> instead of L<IO::Socket::INET> used by L</connect>
-by default.
+present, this takes the precedence over L</RawSocket>.  If
+L</Starttls> is set, then the L</starttls> method will be called by
+L</Socket>.
 
 B<PLEASE NOTE> As of version 2.99_04 of this module, semantics for
 L</Socket> have changed to make it more "DWIM".  L</RawSocket> was
@@ -1317,6 +1317,8 @@ provides.
 If the server does not support the XLIST extension, this method
 returns undef.
 
+Version note: method added in Mail::IMAPClient 3.21
+
 =head2 has_capability
 
 Example:
@@ -2025,6 +2027,8 @@ L</select> if a Folder was previously selected.  On success, returns
 the (same) $imap object.  On failure <undef> is returned and
 L</LastError> is set.
 
+Version note: method added in Mail::IMAPClient 3.17
+
 =head2 rename
 
 Example:
@@ -2463,6 +2467,24 @@ and so on.
 
 The sort method will clear C<$@> before attempting the I<SORT>
 operation just as the L</search> method does.
+
+=head2 starttls
+
+Example:
+
+  $imap->starttls() or die "starttls failed: $@\n";
+
+The B<starttls> method accepts no arguments.  This method is used to
+upgrade an exiting connection which is not authenticated to a TLS/SSL
+connection by using the IMAP STARTTLS command followed by using the
+B<start_SSL> class method from L<IO::Socket::SSL> to do the necessary
+TLS negotiation.  The negotiation is done in a blocking fashion with a
+default B<Timeout> of 30 seconds.  The arguments used in the call to
+B<start_SSL> can be controlled by setting the Mail::IMAPClient
+L</Starttls> attribute to an ARRAY reference containing the desired
+arguments.
+
+Version note: method added in Mail::IMAPClient 3.22
 
 =head2 status
 
@@ -3359,6 +3381,18 @@ For these reasons, the following example will work "out of the box":
 
 If you need more control over the socket, e.g. you have to implement a
 fancier authentication method, see L</RawSocket>.
+
+=head2 Starttls
+
+If an IMAP connection must start TLS/SSL after connecting to a server
+then set this attribute.  If the value is set to an arrayref then they
+will be used as arguments to IO::Socket::SSL::start_SSL.  By default
+this connection is set to blocking while establishing the connection
+with a timeout of 30 seconds.  The socket will be reset to the
+original blocking/non-blocking value after a successful TLS
+negotiation has occured.
+
+Version note: attribute added in Mail::IMAPClient 3.22
 
 =head2 Ssl
 

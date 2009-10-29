@@ -5,6 +5,9 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
+version 3.22_01: Thu Oct 29 11:12:18 EDT 2009
+	- add starttls() method and Starttls attribute to support STARTTLS
+
 version 3.21: Tue Sep 22 19:45:13 EDT 2009
 	- rt.cpan.org#49691: rewrite of fetch_hash to resolve several issues
 	  [Robert Norris]
