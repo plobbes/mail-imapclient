@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.22_01';
+our $VERSION = '3.22_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2356,6 +2356,7 @@ sub parse_headers {
       . ( $fields eq 'ALL' ? '[HEADER]' : "[HEADER.FIELDS ($fields)]" );
 
     my $raw = $self->fetch($string) or return undef;
+    my $cmd = shift @$raw;
 
     my %headers;    # message ids to headers
     my $h;          # fields for current msgid
@@ -2363,6 +2364,7 @@ sub parse_headers {
     my %fieldmap = map { ( lc($_) => $_ ) } @fields;
     my $msgid;
 
+    # BUG: parsing this way is prone to be buggy but works most of the time
     # some example responses:
     # * OK Message 1 no longer exists
     # * 1 FETCH (UID 26535 BODY[HEADER] "")
@@ -2370,7 +2372,7 @@ sub parse_headers {
     # header: value...
     foreach my $header ( map { split /$CR?$LF/o } @$raw ) {
 
-        # little problem: Windows2003 has UID as body, not in header
+        # Windows2003/Maillennium/others? have UID after headers
         if (
             $header =~ s/^\* \s+ (\d+) \s+ FETCH \s+
                         \( (.*?) BODY\[HEADER (?:\.FIELDS)? .*? \]\s*//ix
@@ -2382,7 +2384,6 @@ sub parse_headers {
             {
                 $msgid = $msgattrs =~ m/\b UID \s+ (\d+)/x ? $1 : undef;
             }
-
             $headers{$msgid} = $h if $msgid;
         }
         $header =~ /\S/ or next;    # skip empty lines.
@@ -2392,8 +2393,9 @@ sub parse_headers {
             undef $h;                # inbetween headers
             next;
         }
-        elsif ( !$msgid && $header =~ /^\s*UID\s+(\d+)\s*\)/ ) {
-            $headers{$1} = $h;       # finally found msgid, win2003
+        elsif ( !$msgid && $header =~ /^\s*UID\s+(\d+).*\)$/ ) {
+            $headers{$1} = $h;       # found UID win2003/Maillennium
+
             undef $h;
             next;
         }

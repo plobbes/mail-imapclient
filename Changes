@@ -5,7 +5,8 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.22_01: Thu Oct 29 11:12:18 EDT 2009
+version 3.22_02: Thu Oct 29 23:00:37 EDT 2009
+	- update parse_headers try harder to find UID in fetch response
 	- add starttls() method and Starttls attribute to support STARTTLS
 
 version 3.21: Tue Sep 22 19:45:13 EDT 2009
