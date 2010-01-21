@@ -32,12 +32,12 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 64;
+      : plan tests    => 66;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
 
-my $imap = Mail::IMAPClient->new(
+my @new_args = (
     Server        => $parms{server},
     Port          => $parms{port},
     User          => $parms{user},
@@ -46,9 +46,12 @@ my $imap = Mail::IMAPClient->new(
     Clear         => 0,
     Fast_IO       => $fast,
     Uid           => $uidplus,
-    Range         => $range,
+    Debug         => $debug,
+);
 
-    Debug    => $debug,
+my $imap = Mail::IMAPClient->new(
+    @new_args,
+    Range    => $range,
     Debug_fh => ( $debug ? IO::File->new( 'imap1.debug', 'w' ) : undef )
 );
 
@@ -243,19 +246,9 @@ ok( !$@, "search undeleted" ) or diag( '$@:' . $@ );
 #
 
 my $im2 = Mail::IMAPClient->new(
-    Server        => $parms{server},
-    Port          => $parms{port},
-    User          => $parms{user},
-    Password      => $parms{passed},
-    Authmechanism => $parms{authmechanism},
-    Clear         => 0,
-    ,
-    Timeout => 30,
-    ,
-    Debug    => $debug,
+    @new_args,
+    Timeout  => 30,
     Debug_fh => ( $debug ? IO::File->new(">./imap2.debug") : undef ),
-    Fast_IO  => $fast,
-    Uid      => $uidplus
 );
 ok( defined $im2, 'started second imap client' );
 
@@ -346,3 +339,10 @@ else {
 
 $imap->_disconnect;
 ok( $imap->reconnect, "reconnect" );
+
+# Test STARTTLS - an optional feature so tests always succeed
+{
+    ok( $imap->logout, "logout" );
+    $imap->connect( Starttls => 1 );
+    ok( 1, "OPTIONAL connect(Starttls=>1)" . ( $@ ? ": (error) $@ " : "" ) );
+}
