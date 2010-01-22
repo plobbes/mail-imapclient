@@ -3075,22 +3075,21 @@ Example:
 
   $Maxtemperrors = $imap->Maxtemperrors();
   # or:
-  $imap->Maxtemperrors($new_value);
+  $imap->Maxtemperrors($number);
 
-The I<Maxtemperrors> parameter specifies the number of times a write
-operation is allowed to fail on a "Resource Temporarily Available"
-error.  These errors can occur from time to time if the server is too
-busy to empty out its read buffer (which is logically the "other end"
-of the client's write buffer).  By default, Mail::IMAPClient will
-retry an unlimited number of times, but you can adjust this behavior
-by setting I<Maxtemperrors>.  Note that after each temporary error,
-the server will wait for a number of seconds equal to the number of
-consecutive temporary errors times .25, so very high values for
-I<Maxtemperrors> can slow you down in a big way if your "temporary
-error" is not all that temporary.
+The I<Maxtemperrors> parameter specifies the number of times a read or
+write operation is allowed to fail on a "Resource Temporarily
+Available" (e.g. EAGAIN) error.  The default setting is I<undef> which
+means there is no limit.
 
-You can set this parameter to "UNLIMITED" to ignore "Resource
-Temporarily Unavailable" errors. This is the default.
+Setting this parameter to the string "unlimited" (instead of undef) to
+ignore "Resource Temporarily Unavailable" errors is deprecated.
+
+B<Note>: This setting should be used with caution and may be removed
+in a future release.  Setting this can cause methods to return to the
+caller before data is received (and then handled) properly thereby
+possibly then leaving the module in a bad state.  In the future, this
+behavior may be changed in an attempt to avoid this situation.
 
 =head2 Password
 
@@ -3669,6 +3668,8 @@ Please send bug reports to C<bug-Mail-IMAPClient@rt.cpan.org>
   All rights reserved.
 
   Copyright 2007, 2008, 2009 Mark Overmeer
+
+  Copyright 2010 Phil Pearl (Lobbes)
 
 This program is free software; you can redistribute under the same
 terms as Perl itself.
