@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.22';
+our $VERSION = '3.23_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1268,7 +1268,7 @@ sub _imap_command {
               unless (
                    $! == EPIPE
                 or $! == ECONNRESET
-                or $self->LastError =~ /(?:timeout|error) waiting\b/
+                or $self->LastError =~ /(?:error\(.*?\)|timeout) waiting\b/
                 or $self->LastError =~ /(?:socket closed|\* BYE)\b/
 
                 # BUG? reconnect if caller ignored/missed earlier errors?
@@ -1591,7 +1591,7 @@ sub _read_line {
             my $rc = _read_more( $socket, $timeout );
             unless ( $rc > 0 ) {
                 my $msg =
-                    ( $rc ? "error" : "timeout" )
+                    ( $rc ? "error($rc)" : "timeout" )
                   . " waiting ${timeout}s for data from server"
                   . ( $! ? ": $!" : "" );
                 $self->LastError($msg);
@@ -1690,7 +1690,7 @@ sub _read_line {
                         my $rc = _read_more( $socket, $timeout );
                         unless ( $rc > 0 ) {
                             my $msg =
-                                ( $rc ? "error" : "timeout" )
+                                ( $rc ? "error($rc)" : "timeout" )
                               . " waiting ${timeout}s for literal data from server"
                               . ( $! ? ": $!" : "" );
                             $self->LastError($msg);
@@ -1876,8 +1876,9 @@ sub Unescape {
 
 sub logout {
     my $self = shift;
-    $self->_imap_command("LOGOUT");
+    my $rc = $self->_imap_command("LOGOUT");
     $self->_disconnect;
+    return $rc;
 }
 
 sub _disconnect {
