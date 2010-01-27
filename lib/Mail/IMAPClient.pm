@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.23_01';
+our $VERSION = '3.23_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -3083,10 +3083,10 @@ sub authenticate {
             my ( $code, $client ) = @_;
 
             require Authen::NTLM;
-            Authen::NTLM::ntlm_user( $self->User );
-            Authen::NTLM::ntlm_password( $self->Password );
-            Authen::NTLM::ntlm_domain( $self->Domain ) if $self->Domain;
-            Authen::NTLM::ntlm();
+            Authen::NTLM::ntlm_user( $client->User );
+            Authen::NTLM::ntlm_password( $client->Password );
+            Authen::NTLM::ntlm_domain( $client->Domain ) if $client->Domain;
+            Authen::NTLM::ntlm($code);
         };
     }
 
