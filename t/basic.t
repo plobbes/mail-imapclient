@@ -32,7 +32,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 66;
+      : plan tests    => 67;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -303,21 +303,16 @@ $im2->delete_message( @{ $im2->messages } )
 ok( $im2->close, "close" );
 $im2->delete($migtarget);
 
-ok( $im2->logout, "logout" );
+ok( $im2->logout, "logout" ) or diag("logout error: $@");
 
 # Test IDLE
-{
-    if ( $imap->has_capability("IDLE") ) {
-        ok( my $idle = $imap->idle, "idle" );
-        sleep 1;
-        ok( $imap->done($idle), "done" );
-        ok( !$@, "LastError not set" ) or diag( '$@:' . $@ );
-    }
-    else {
-        ok( 1, "idle not supported" );
-        ok( 1, "skipping 1/2 idle tests" );
-        ok( 1, "skipping 2/2 idle tests" );
-    }
+SKIP: {
+    skip "IDLE not supported", 4 unless $imap->has_capability("IDLE");
+    ok( my $idle = $imap->idle, "idle" );
+    sleep 1;
+    ok( $imap->idle_data,   "idle_data" );
+    ok( $imap->done($idle), "done" );
+    ok( !$@, "LastError not set" ) or diag( '$@:' . $@ );
 }
 
 $imap->select('inbox');
@@ -342,7 +337,7 @@ ok( $imap->reconnect, "reconnect" );
 
 # Test STARTTLS - an optional feature so tests always succeed
 {
-    ok( $imap->logout, "logout" );
+    ok( $imap->logout, "logout" ) or diag("logout error: $@");
     $imap->connect( Starttls => 1 );
     ok( 1, "OPTIONAL connect(Starttls=>1)" . ( $@ ? ": (error) $@ " : "" ) );
 }

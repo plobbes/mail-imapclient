@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.23_02';
+our $VERSION = '3.23_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1215,6 +1215,35 @@ sub idle {
     $self->_imap_command( "IDLE", $good ) ? $count : undef;
 }
 
+sub idle_data {
+    my $self    = shift;
+    my $timeout = defined( $_[0] ) ? shift : 0.025;
+    my $socket  = $self->Socket;
+
+    # current index in Results array
+    my $trans_c1 = $self->_next_index;
+
+    # BUG: refactor/add error handling for _read_more
+    # look for all untagged responses
+    my $rc;
+    while ( ( $rc = _read_more( $socket, $timeout ) ) > 0 ) {
+        $self->_get_response( '*', qr/\S+/ ) or return undef;
+    }
+
+    # select returns -1 on errors
+    return undef if $rc < 0;
+
+    my $trans_c2 = $self->_next_index;
+
+    # if current index in Results array has changed return data
+    my @res;
+    if ( $trans_c1 < $trans_c2 ) {
+        @res = $self->Results;
+        @res = @res[ $trans_c1 .. ( $trans_c2 - 1 ) ];
+    }
+    return wantarray ? @res : \@res;
+}
+
 sub done {
     my $self = shift;
     my $count = shift || $self->Count;
@@ -1314,7 +1343,7 @@ sub _imap_command {
 # options:
 #   addcrlf => 0|1  - suppress adding CRLF to $string
 #   addtag  => 0|1  - suppress adding $tag to $string
-#   tag     => $tag - use this $tag instead of incrementing count
+#   tag     => $tag - use this $tag instead of incrementing $self->Count
 sub _imap_command_do {
     my $self   = shift;
     my $opt    = ref( $_[0] ) eq "HASH" ? shift : {};
@@ -1414,6 +1443,7 @@ sub _get_response {
     }
 
     if ($code) {
+        $code =~ s/$CR?$LF?$//o;
         $code = uc($code) unless ( $good and $code eq $good );
 
         # on successful LOGOUT $code is OK (not BYE!) see RFC 3501 sect 7.1.5
@@ -1876,7 +1906,7 @@ sub Unescape {
 
 sub logout {
     my $self = shift;
-    my $rc = $self->_imap_command("LOGOUT");
+    my $rc   = $self->_imap_command("LOGOUT");
     $self->_disconnect;
     return $rc;
 }

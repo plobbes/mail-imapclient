@@ -998,37 +998,35 @@ shortcut for specifying C<$imap-E<gt>unset_flag("Seen",@msgs)>.
 
 Example:
 
-  $imap->disconnect or warn "Could not disconnect: $@\n";
+  $imap->disconnect or warn "Could not logout: $@\n";
 
-Disconnects the IMAPClient object from the server.  Functionally
-equivalent to the L</logout> method.  (In fact it's actually a synonym
-for L</logout>.)
+This method calls L</logout>, see L</logout> for details.
 
 =head2 done
 
 Example:
 
-  my $tag = $imap->idle or warn "Couldn't idle: $@\n";
-  goDoOtherThings();
-  $imap->done($tag) or warn "Error from done: $@\n";
+  my $tag = $imap->idle or warn "idle failed: $@\n";
+  doSomethingA();
+  my $idlemsgs = $imap->idle_data() or warn "idle_data error: $@\n";
+  doSomethingB();
+  my $results = $imap->done($tag) or warn "Error from done: $@\n";
 
-The B<done> method tells the IMAP server that the connection is
-finished idling.  See L</idle> for more information.  It accepts one
-argument, which is the I<tag> (identifier) received from the previous
-call to L</idle>.  If no I<tag> is specified when calling B<done> then
-the default I<tag> using an internal B<Count> attribute is assumed to
-be the I<tag> to use.
+The B<done> method tells the IMAP server to terminate the IDLE
+command.  The only argument is the I<tag> (identifier) received from
+the previous call to L</idle>.  If I<tag> is not specified a default
+I<tag> based on the B<Count> attribute is assumed to be the I<tag> to
+look for in the response from the server.
 
 If an invalid I<tag> is specified, or the default I<tag> is wrong,
 then B<done> will hang indefinitely or until a timeout occurs.
 
-If you call done without previously having called L</idle> then the
-server will likely respond with I<* BAD Invalid tag>.
+If B<done> is called when an L</idle> command is not active then the
+server will likely respond with an error like I<* BAD Invalid tag>.
 
-If you try to run any other mailbox method after calling L</idle> but
-before calling L</done>, then that method will not only fail but also
-take you out of the IDLE state.  In this case, a subsequent call to
-B<done> would result in an error.
+On failure <undef> is returned and L</LastError> is set.
+
+See also L</idle>, L</imap_data> and L</Results>.
 
 =head2 examine
 
@@ -1336,35 +1334,59 @@ calls fails then undef is returned.
 
 Example:
 
-  my $idle = $imap->idle or warn "Couldn't idle: $@\n";
-  goDoOtherThings();
-  $imap->done($idle) or warn "Error from done: $@\n";
+  my $tag = $imap->idle or warn "idle failed: $@\n";
+  doSomethingA();
+  my $idlemsgs = $imap->idle_data() or warn "idle_data error: $@\n";
+  doSomethingB();
+  my $results = $imap->done($tag) or warn "Error from done: $@\n";
 
-The B<idle> method places the IMAP connection in an IDLE state.  Your
-server must support the IMAP IDLE extension to use this method.  (See
-RFC2177 for a discussion of the IDLE IMAP extension.)  The B<idle>
-method accepts no arguments and returns a transaction number.  This
-transaction number must be supplied as the argument for L</done> when
-the L</done> method is later called.
+The B<idle> method tells the IMAP server the client is ready to accept
+unsolicited mailbox update messages.  This method is only valid on
+servers that support the IMAP IDLE extension, see RFC2177 for details.
 
-Use the L</done> method to tell the IMAP server that the connection is
-finished idling.
+The B<idle> method accepts no arguments and returns the I<tag>
+(identifier) that was sent by the client for this command.  This tag
+should be supplied as the argument to L</done> when ending the IDLE
+command.
 
-If you attempt to use the B<idle> method against a server that does
-not have the IDLE capability then the B<idle> method will return
-C<undef>.  If you then attempt to use the B<idle> method a second time
-the B<idle> method will return C<undef> again.
+On failure <undef> is returned and L</LastError> is set.
 
-If you successfully run the B<idle> method, then you must use the
-L</done> method to stop idling (or to continue, in the parlance of
-RFC2177).  Failure to do so will only encourage your server to call
-you I<BAD> and to rant about a I<Bogus IDLE continuation>.
+The method L</idle_data> may be used once B<idle> has been successful.
+However, no mailbox operations may be called until the B<idle> command
+has been terminated by calling L</done>.  Failure to do so will result
+in an error and the idle command will typically be terminated by the
+server.
 
-If you try to run any other mailbox method after calling L</idle> but
-before calling L</done>, then that method will not only fail but also
-take you out of the IDLE state.  This means that when you eventually
-remember to call B<done> you will just get an I<* BAD Invalid tag>
-message.
+See also L</imap_data> and L</done>.
+
+=head2 idle_data
+
+Example:
+
+  my $tag = $imap->idle or warn "idle failed: $@\n";
+  doSomethingA();
+  my $idlemsgs = $imap->idle_data() or warn "idle_data error: $@\n";
+  doSomethingB();
+  my $results = $imap->done($tag) or warn "Error from done: $@\n";
+
+The B<idle_data> method can be used to accept any unsolicited mailbox
+update messages that have been sent by the server during an L</idle>
+command.  This method does not send any commands to the server, it
+simply waits for data from the server and returns that data to the
+caller.
+
+The B<idle> method accepts an optional $timeout argument and returns
+an array (or an array reference if called in scalar context) with the
+messages from the server.
+
+By default a timeout of 0.025 seconds is used, internally the timeout
+is passed to L<perlfunc/select>.  The timeout controls how long the
+select call blocks if there are no messages waiting to be read from
+the server.
+
+On failure <undef> is returned and L</LastError> is set.
+
+See also L</imap> and L</done>.
 
 =head2 imap4rev1
 
