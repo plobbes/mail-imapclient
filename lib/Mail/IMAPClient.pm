@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.23_03';
+our $VERSION = '3.23_04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -43,6 +43,28 @@ my %SEARCH_KEYS = map { ( $_ => 1 ) } qw(
   SEEN SENTBEFORE SENTON SENTSINCE SINCE SMALLER SUBJECT
   TEXT TO UID UNANSWERED UNDELETED UNDRAFT UNFLAGGED
   UNKEYWORD UNSEEN);
+
+# modules require(d) during runtime when applicable
+my %Load_Module = (
+    "SSL"           => "IO::Socket::SSL",
+    "BodyStructure" => "Mail::IMAPClient::BodyStructure",
+    "Envelope"      => "Mail::IMAPClient::BodyStructure::Envelope",
+    "Thread"        => "Mail::IMAPClient::Thread",
+);
+
+sub _load_module {
+    my $self   = shift;
+    my $modkey = shift;
+    my $module = $Load_Module{$modkey} || $modkey;
+
+    local ($@);    # avoid stomping on global $@
+    eval "require $module";
+    if ($@) {
+        $self->LastError("Unable to load '$module': $@");
+        return undef;
+    }
+    return $module;
+}
 
 sub _debug {
     my $self = shift;
@@ -106,10 +128,10 @@ sub Fast_io(;$) {
     my $socket = $self->{Socket}
       or return undef;
 
+    local ($@);    # avoid stomping on global $@
     unless ($use) {
         eval { fcntl( $socket, F_SETFL, delete $self->{_fcntl} ) }
           if exists $self->{_fcntl};
-        $@ = '';
         $self->{Fast_io} = 0;
         return undef;
     }
@@ -119,7 +141,6 @@ sub Fast_io(;$) {
         $self->{Fast_io} = 0;
         $self->_debug("not using Fast_IO; not available on this platform")
           unless $self->{_fastio_warning_}++;
-        $@ = '';
         return undef;
     }
 
@@ -302,12 +323,7 @@ sub connect(@) {
     else {
         my $ioclass = "IO::Socket::INET";
         if ( $self->Ssl ) {
-            $ioclass = "IO::Socket::SSL";
-            eval "require $ioclass";
-            if ($@) {
-                $self->LastError("Unable to load '$ioclass' for Ssl: $@");
-                return undef;
-            }
+            $ioclass = $self->_load_module("SSL") or return undef;
         }
 
         $self->_debug("Connecting via $ioclass to $server:$port @timeout");
@@ -391,13 +407,7 @@ sub starttls {
     # MUST discard cached capability info; should re-issue capability command
     delete $self->{CAPABILITY};
 
-    my $ioclass = "IO::Socket::SSL";
-    eval "require $ioclass";
-    if ($@) {
-        $self->LastError("Unable to load '$ioclass' for starttls: $@");
-        return undef;
-    }
-
+    my $ioclass  = $self->_load_module("SSL") or return undef;
     my $sock     = $self->RawSocket;
     my $blocking = $sock->blocking;
 
@@ -1919,6 +1929,7 @@ sub _disconnect {
     delete $self->{_IMAP4REV1};
     $self->State(Unconnected);
     if ( my $sock = delete $self->{Socket} ) {
+        local ($@);    # avoid stomping on global $@
         eval { $sock->close };
     }
     $self;
@@ -1977,17 +1988,15 @@ sub exists {
 # Updated to handle embedded literal strings
 sub get_bodystructure {
     my ( $self, $msg ) = @_;
-    unless ( eval { require Mail::IMAPClient::BodyStructure; } ) {
-        $self->LastError("Unable to use get_bodystructure: $@");
-        return undef;
-    }
+
+    my $class = $self->_load_module("BodyStructure") or return undef;
 
     my $out = $self->fetch( $msg, "BODYSTRUCTURE" ) or return undef;
 
     my $bs = "";
     my $output = first { /BODYSTRUCTURE\s+\(/i } @$out;    # Wee! ;-)
     if ( $output =~ /$CRLF$/o ) {
-        $bs = eval { Mail::IMAPClient::BodyStructure->new($output) };
+        $bs = eval { $class->new($output) };    # BUG? localize $@ here?
     }
     else {
         $self->_debug("get_bodystructure: reassembling original response");
@@ -2010,7 +2019,7 @@ sub get_bodystructure {
 
             $self->_debug("get_bodystructure: reassembled output=$output<END>");
         }
-        eval { $bs = Mail::IMAPClient::BodyStructure->new($output) };
+        eval { $bs = $class->new($output) };   # BUG? localize $@ here?
     }
 
     $self->_debug(
@@ -2021,10 +2030,10 @@ sub get_bodystructure {
 # Updated to handle embedded literal strings
 sub get_envelope {
     my ( $self, $msg ) = @_;
-    unless ( eval { require Mail::IMAPClient::BodyStructure; } ) {
-        $self->LastError("Unable to use get_envelope: $@");
-        return undef;
-    }
+
+    # Envelope class is defined within BodyStructure
+    my $class = $self->_load_module("BodyStructure") or return undef;
+    $class .= "::Envelope";
 
     my $out = $self->fetch( $msg, 'ENVELOPE' ) or return undef;
 
@@ -2037,7 +2046,7 @@ sub get_envelope {
     }
 
     if ( $output =~ /$CRLF$/o ) {
-        eval { $bs = Mail::IMAPClient::BodyStructure::Envelope->new($output) };
+        eval { $bs = $class->new($output) }; # BUG? localize $@ here?
     }
     else {
         $self->_debug("get_envelope: reassembling original response");
@@ -2063,7 +2072,7 @@ sub get_envelope {
             $self->_debug("get_envelope: reassembled output=$output<END>");
         }
 
-        eval { $bs = Mail::IMAPClient::BodyStructure::Envelope->new($output) };
+        eval { $bs = $class->new($output) }; # BUG? localize $@ here?
     }
 
     $self->_debug( "get_envelope: msg $msg returns ref: " . $bs || "UNDEF" );
@@ -2684,13 +2693,12 @@ sub thread {
     unless ($thread_parser) {
         return if $thread_parser == 0;
 
-        eval { require Mail::IMAPClient::Thread; };
-        if ($@) {
-            $self->LastError($@);
+        my $class = $self->_load_module("Thread");
+        unless ($class) {
             $thread_parser = 0;
             return undef;
         }
-        $thread_parser = Mail::IMAPClient::Thread->new;
+        $thread_parser = $class->new;
     }
 
     my $thread;
@@ -3059,6 +3067,7 @@ sub authenticate {
         }
     }
 
+    # BUG? use _load_module for these too?
     if ( $scheme eq 'CRAM-MD5' ) {
         $response ||= sub {
             my ( $code, $client ) = @_;
@@ -3120,7 +3129,12 @@ sub authenticate {
         };
     }
 
-    unless ( $self->_send_line( $response->( $code, $self ) ) ) {
+    my $resp = $response->( $code, $self );
+    unless ( defined($resp) ) {
+        $self->LastError( "Error getting $scheme data: " . $self->LastError );
+        return undef;
+    }
+    unless ( $self->_send_line($resp) ) {
         $self->LastError( "Error sending $scheme data: " . $self->LastError );
         return undef;
     }
