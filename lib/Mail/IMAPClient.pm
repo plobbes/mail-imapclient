@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.23_04';
+our $VERSION = '3.23_05';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1236,7 +1236,13 @@ sub idle_data {
     # BUG: refactor/add error handling for _read_more
     # look for all untagged responses
     my $rc;
-    while ( ( $rc = _read_more( $socket, $timeout ) ) > 0 ) {
+    while (
+        (
+            $rc =
+            $self->_read_more( { error_on_timeout => 0 }, $socket, $timeout )
+        ) > 0
+      )
+    {
         $self->_get_response( '*', qr/\S+/ ) or return undef;
     }
 
@@ -1628,23 +1634,8 @@ sub _read_line {
         my $transno = $self->Transaction;
 
         if ($timeout) {
-            my $rc = _read_more( $socket, $timeout );
-            unless ( $rc > 0 ) {
-                my $msg =
-                    ( $rc ? "error($rc)" : "timeout" )
-                  . " waiting ${timeout}s for data from server"
-                  . ( $! ? ": $!" : "" );
-                $self->LastError($msg);
-                $self->_record(
-                    $transno,
-                    [
-                        $self->_next_index($transno), "ERROR",
-                        "$transno * NO $msg"
-                    ]
-                );
-                $self->_disconnect;    # BUG: can not handle timeouts gracefully
-                return undef;
-            }
+            my $rc = $self->_read_more( $socket, $timeout );
+            return undef unless ( $rc > 0 );
         }
 
         my $emsg;
@@ -1727,25 +1718,10 @@ sub _read_line {
 
                 while ( $expected_size > length $litstring ) {
                     if ($timeout) {
-                        my $rc = _read_more( $socket, $timeout );
-                        unless ( $rc > 0 ) {
-                            my $msg =
-                                ( $rc ? "error($rc)" : "timeout" )
-                              . " waiting ${timeout}s for literal data from server"
-                              . ( $! ? ": $!" : "" );
-                            $self->LastError($msg);
-                            $self->_record(
-                                $transno,
-                                [
-                                    $self->_next_index($transno), "ERROR",
-                                    "$transno * NO $msg"
-                                ]
-                            );
-                            $self->_disconnect;   # BUG: can not handle timeouts
-                            return undef;
-                        }
+                        my $rc = $self->_read_more( $socket, $timeout );
+                        return undef unless ( $rc > 0 );
                     }
-                    else {                        # 25 ms before retry
+                    else {    # 25 ms before retry
                         CORE::select( undef, undef, undef, 0.025 );
                     }
 
@@ -1837,7 +1813,9 @@ sub _sysread($$$$) {
     $rm ? $rm->(@_) : sysread( $fh, $$buf, $len, $off );
 }
 
-sub _read_more($$) {
+sub _read_more {
+    my $self = shift;
+    my $opt = ref( $_[0] ) eq "HASH" ? shift : {};
     my ( $socket, $timeout ) = @_;
 
     # IO::Socket::SSL buffers some data internally, so there might be some
@@ -1847,7 +1825,30 @@ sub _read_more($$) {
 
     my $rvec = '';
     vec( $rvec, fileno($socket), 1 ) = 1;
-    return CORE::select( $rvec, undef, $rvec, $timeout );
+
+    my $rc = CORE::select( $rvec, undef, $rvec, $timeout );
+
+    # fast track success
+    return $rc if $rc > 0;
+
+    # by default set an error on timeout
+    my $err_on_timeout =
+      exists $opt->{error_on_timeout} ? $opt->{error_on_timeout} : 1;
+
+    # $rc is 0 then we timed out
+    return $rc if !$rc and !$err_on_timeout;
+
+    # set the appropriate error and return
+    my $transno = $self->Transaction;
+    my $msg =
+        ( $rc ? "error($rc)" : "timeout" )
+      . " waiting ${timeout}s for data from server"
+      . ( $! ? ": $!" : "" );
+    $self->LastError($msg);
+    $self->_record( $transno,
+        [ $self->_next_index($transno), "ERROR", "$transno * NO $msg" ] );
+    $self->_disconnect;    # BUG: can not handle timeouts gracefully
+    return $rc;
 }
 
 sub _trans_index() {
@@ -2005,7 +2006,7 @@ sub get_bodystructure {
         foreach my $o ( $self->_transaction ) {
             next unless $self->_is_output_or_literal($o);
             $started++ if $o->[DATA] =~ /BODYSTRUCTURE \(/i;
-            ;    # Hi, vi! ;-)
+            ;                                   # Hi, vi! ;-)
             $started or next;
 
             if ( length $output && $self->_is_literal($o) ) {
@@ -2019,7 +2020,7 @@ sub get_bodystructure {
 
             $self->_debug("get_bodystructure: reassembled output=$output<END>");
         }
-        eval { $bs = $class->new($output) };   # BUG? localize $@ here?
+        eval { $bs = $class->new($output) };    # BUG? localize $@ here?
     }
 
     $self->_debug(
@@ -2046,7 +2047,7 @@ sub get_envelope {
     }
 
     if ( $output =~ /$CRLF$/o ) {
-        eval { $bs = $class->new($output) }; # BUG? localize $@ here?
+        eval { $bs = $class->new($output) };    # BUG? localize $@ here?
     }
     else {
         $self->_debug("get_envelope: reassembling original response");
@@ -2072,7 +2073,7 @@ sub get_envelope {
             $self->_debug("get_envelope: reassembled output=$output<END>");
         }
 
-        eval { $bs = $class->new($output) }; # BUG? localize $@ here?
+        eval { $bs = $class->new($output) };    # BUG? localize $@ here?
     }
 
     $self->_debug( "get_envelope: msg $msg returns ref: " . $bs || "UNDEF" );

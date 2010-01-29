@@ -5,7 +5,7 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.23_04: Thu Jan 28 22:11:44 EST 2010
+version 3.23_05: Fri Jan 29 00:39:27 EST 2010
 	- new idle_data() method to retrieve untagged messages during idle
 	  [Daniel Richard G]
 	- added/updated documentation for idle, idle_data, and done
@@ -16,6 +16,7 @@ version 3.23_04: Thu Jan 28 22:11:44 EST 2010
 	- set/return error when $response->() returns undef in authenticate()
 	- new internal method _load_module() centralizing some 'require' calls
 	- localize use $@ in several places to avoid stomping on global val
+	- refactor code calling _read_more() to centralize error handling
 
 version 3.22: Thu Jan 21 15:25:54 EST 2010
 	- rt.cpan.org#52313: Getting read errors if Fast_io is set to 1
