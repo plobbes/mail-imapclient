@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.23_05';
+our $VERSION = '3.23';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1233,7 +1233,6 @@ sub idle_data {
     # current index in Results array
     my $trans_c1 = $self->_next_index;
 
-    # BUG: refactor/add error handling for _read_more
     # look for all untagged responses
     my $rc;
     while (

@@ -5,9 +5,9 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.23_05: Fri Jan 29 00:39:27 EST 2010
+version 3.23: Fri Jan 29 00:39:27 EST 2010
 	- new idle_data() method to retrieve untagged messages during idle
-	  [Daniel Richard G]
+	  similar to method suggested by Daniel Richard G
 	- added/updated documentation for idle, idle_data, and done
 	- rt.cpan.org#53998: fix NTLM auth: call ntlm with challenge string
 	  [Dragoslav Mlakar]
