@@ -1379,14 +1379,18 @@ The B<idle> method accepts an optional $timeout argument and returns
 an array (or an array reference if called in scalar context) with the
 messages from the server.
 
-By default a timeout of 0.025 seconds is used, internally the timeout
-is passed to L<perlfunc/select>.  The timeout controls how long the
-select call blocks if there are no messages waiting to be read from
-the server.
+By default a timeout of 0 seconds is used (do not block).  Internally
+the timeout is passed to L<perlfunc/select>.  The timeout controls how
+long the select call blocks if there are no messages waiting to be
+read from the server.
 
 On failure <undef> is returned and L</LastError> is set.
 
 See also L</imap> and L</done>.
+
+Version note: method added in Mail::IMAPClient 3.23
+Warning: this method is considered experimental and the
+interface/output may change in a future version.
 
 =head2 imap4rev1
 
