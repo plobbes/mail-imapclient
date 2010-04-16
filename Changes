@@ -5,6 +5,12 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
+version 3.24_01: Thu Apr 15 22:35:09 EDT 2010
+	- idle_data() should not read/block after server returns data
+	  [Marc Thielemann]
+	- idle_data() now uses a timeout of 0 by default as documented
+	- _get_response() now checks for defined($code) to allow $code==0
+
 version 3.23: Fri Jan 29 00:39:27 EST 2010
 	- new beta idle_data() method to retrieve untagged messages during idle
 	  similar to method suggested by Daniel Richard G

@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.23';
+our $VERSION = '3.24_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1227,23 +1227,28 @@ sub idle {
 
 sub idle_data {
     my $self    = shift;
-    my $timeout = defined( $_[0] ) ? shift : 0.025;
+    my $timeout = scalar(@_) ? shift : 0;
     my $socket  = $self->Socket;
 
     # current index in Results array
     my $trans_c1 = $self->_next_index;
 
     # look for all untagged responses
-    my $rc;
-    while (
-        (
-            $rc =
-            $self->_read_more( { error_on_timeout => 0 }, $socket, $timeout )
-        ) > 0
-      )
-    {
-        $self->_get_response( '*', qr/\S+/ ) or return undef;
-    }
+    my ( $rc, $ret );
+    do {
+        $ret =
+          $self->_read_more( { error_on_timeout => 0 }, $socket, $timeout );
+
+        # set rc on first pass or on errors
+        $rc = $ret if ( !defined($rc) or $ret < 0 );
+
+        # not using /\S+/ because that can match 0 in "* 0 RECENT"
+        # leading the library to act as if things failed
+        if ( $ret > 0 ) {
+            $self->_get_response( '*', qr/\d+\s+\w+|\w+/ ) or return undef;
+            $timeout = 0;    # check for more data without blocking!
+        }
+    } while $ret > 0;
 
     # select returns -1 on errors
     return undef if $rc < 0;
@@ -1425,7 +1430,7 @@ sub _get_response {
     my @readopt = defined( $opt->{outref} ) ? ( $opt->{outref} ) : ();
 
     my ( $count, $out, $code, $byemsg ) = ( $self->Count, [], undef, undef );
-    until ($code) {
+    until ( defined($code) ) {
         my $output = $self->_read_line(@readopt) or return undef;
         $out = $output;    # keep last response just in case
 
@@ -1457,7 +1462,7 @@ sub _get_response {
         }
     }
 
-    if ($code) {
+    if ( defined($code) ) {
         $code =~ s/$CR?$LF?$//o;
         $code = uc($code) unless ( $good and $code eq $good );
 
