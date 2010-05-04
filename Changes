@@ -5,9 +5,13 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.24_01: Thu Apr 15 22:35:09 EDT 2010
+version 3.24_02: Mon May  3 23:15:13 EDT 2010
+	- rt.cpan.org#57048: _quote_search() using $_ in loop instead of $v
+	  [Matthaus Kiem]
+	- added examples/idle.pl program showing use of idle and idle_data
 	- idle_data() should not read/block after server returns data
 	  [Marc Thielemann]
+        - idle_data() _get_response regexp updated to not match errors
 	- idle_data() now uses a timeout of 0 by default as documented
 	- _get_response() now checks for defined($code) to allow $code==0
 

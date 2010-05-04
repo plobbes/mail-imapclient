@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.24_01';
+our $VERSION = '3.24_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1235,6 +1235,7 @@ sub idle_data {
 
     # look for all untagged responses
     my ( $rc, $ret );
+
     do {
         $ret =
           $self->_read_more( { error_on_timeout => 0 }, $socket, $timeout );
@@ -1245,7 +1246,8 @@ sub idle_data {
         # not using /\S+/ because that can match 0 in "* 0 RECENT"
         # leading the library to act as if things failed
         if ( $ret > 0 ) {
-            $self->_get_response( '*', qr/\d+\s+\w+|\w+/ ) or return undef;
+            $self->_get_response( '*', qr/(?!BAD|BYE|NO)(?:\d+\s+\w+|\S+)/ )
+              or return undef;
             $timeout = 0;    # check for more data without blocking!
         }
     } while $ret > 0;
@@ -2632,7 +2634,7 @@ sub _quote_search {
         if ( ref($v) eq "SCALAR" ) {
             push( @ret, $$v );
         }
-        elsif ( exists $SEARCH_KEYS{ uc($_) } ) {
+        elsif ( exists $SEARCH_KEYS{ uc($v) } ) {
             push( @ret, $v );
         }
         elsif ( @args == 1 ) {
