@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.24_02';
+our $VERSION = '3.24_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2961,6 +2961,8 @@ sub append_file {
           or push( @err, "Unable to open file '$file': $!" );
     }
 
+    binmode($fh);
+
     if (@err) {
         $self->LastError( join( ", ", @err ) );
         return undef;
@@ -2997,9 +2999,30 @@ sub append_file {
     my $count = $self->Count;
 
     # Now send the message itself
-    my $buffer;
-    while ( $fh->sysread( $buffer, APPEND_BUFFER_SIZE ) ) {
-        $buffer =~ s/\r?\n/$CRLF/og;
+    my ( $buffer, $buflen ) = ( "", 0 );
+    until ( !$buflen and eof($fh) ) {
+
+        if ( $buflen < APPEND_BUFFER_SIZE ) {
+          FILLBUFF:
+            while ( my $line = <$fh> ) {
+                $line =~ s/\r?\n$/$CRLF/;
+                $buffer .= $line;
+                $buflen = length($buffer);
+                last FILLBUFF if ( $buflen >= APPEND_BUFFER_SIZE );
+            }
+        }
+
+        # exit loop entirely if we are out of data
+        last unless $buflen;
+
+        # save anything over desired buffer size for next iteration
+        my $savebuff =
+          ( $buflen > APPEND_BUFFER_SIZE )
+          ? substr( $buffer, APPEND_BUFFER_SIZE )
+          : undef;
+
+        # reduce buffer to desired size
+        $buffer = substr( $buffer, 0, APPEND_BUFFER_SIZE );
 
         $self->_record(
             $count,
@@ -3014,6 +3037,10 @@ sub append_file {
             $self->LastError( "Error appending message: " . $self->LastError );
             return undef;
         }
+
+        # retain any saved data and continue loop
+        $buffer = defined($savebuff) ? $savebuff : "";
+        $buflen = length($buffer);
     }
 
     # finish off append
