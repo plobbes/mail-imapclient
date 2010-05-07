@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.24_03';
+our $VERSION = '3.24_05';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -57,7 +57,6 @@ sub _load_module {
     my $modkey = shift;
     my $module = $Load_Module{$modkey} || $modkey;
 
-    local ($@);    # avoid stomping on global $@
     eval "require $module";
     if ($@) {
         $self->LastError("Unable to load '$module': $@");
@@ -2961,12 +2960,12 @@ sub append_file {
           or push( @err, "Unable to open file '$file': $!" );
     }
 
-    binmode($fh);
-
     if (@err) {
         $self->LastError( join( ", ", @err ) );
         return undef;
     }
+
+    binmode($fh);
 
     my $date;
     if ( $fh and $use_filetime ) {
