@@ -1569,8 +1569,16 @@ client enters the I<Unconnected> state.  This method does not, destroy
 the IMAPClient object, thus the L</connect> and L</login> methods can
 be used to establish a new IMAP session.
 
-Per RFC2683, Mail::IMAPClient will attempt to log out of the server
-during B<DESTROY> if the object is in the L</Connected> state.
+Note that RFC2683 section 3.1.2 (Severed connections) makes some
+recommendations on how IMAP clients should behave.  It is up to the
+user of this module to decide on the preferred behavior and code
+accordingly.
+
+Version note: documentation (from 2.x through 3.23) claimed that
+Mail::IMAPClient would attempt to log out of the server during
+B<DESTROY> if the object is in the L</Connected> state.  This
+documentation was apparently incorrect from at least 2.2.2 and
+possibly earlier versions on up.
 
 =head2 lsub
 
