@@ -12,6 +12,7 @@ examples/copy_folder.pl
 examples/cyrus_expire.pl
 examples/cyrus_expunge.pl
 examples/find_dup_msgs.pl
+examples/idle.pl
 examples/imap_to_mbox.pl
 examples/imtestExample.pl
 examples/migrate_mail2.pl
