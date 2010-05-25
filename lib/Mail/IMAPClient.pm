@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.24';
+our $VERSION = '3.25';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2697,7 +2697,7 @@ sub thread {
       or return undef;
 
     unless ($thread_parser) {
-        return if $thread_parser == 0;
+        return if ( defined($thread_parser) and $thread_parser == 0 );
 
         my $class = $self->_load_module("Thread");
         unless ($class) {
