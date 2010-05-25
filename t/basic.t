@@ -381,9 +381,17 @@ else {
 $imap->_disconnect;
 ok( $imap->reconnect, "reconnect" );
 
+# LOGOUT
+# - on successful LOGOUT $code is OK (not BYE!) see RFC 3501 sect 7.1.5
+#   however some servers return BYE instead so we let that pass here...
+{
+    my $rc = $imap->logout;
+    my $err = $imap->LastError || "OK";
+    ok( ($rc or $err =~ /BYE/), "logout: $err" );
+}
+
 # Test STARTTLS - an optional feature so tests always succeed
 {
-    ok( $imap->logout, "logout" ) or diag("logout error: $@");
     $imap->connect( Starttls => 1 );
     ok( 1, "OPTIONAL connect(Starttls=>1)" . ( $@ ? ": (error) $@ " : "" ) );
 }
