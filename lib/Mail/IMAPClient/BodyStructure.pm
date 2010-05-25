@@ -106,17 +106,26 @@ sub bodystructure
     my $prefix = $self->{_prefix} || "";
     $prefix    =~ s/\.?$/./;
 
-    # in a multipart message each subpart is one level "higher"
-    $prefix =~ s/\.\d+\.$/./ if ($self->{bodytype} eq 'MULTIPART');
-
     foreach my $p ( @{$self->{bodystructure}} )
     {   $partno++;
 
-        $p->{_prefix} = "$prefix$partno";
-
         # BUG?: old code didn't add .TEXT sections, should we skip these?
-        my $pno = $partno;
-        $pno = "TEXT" if ($partno == 1 and $self->{bodytype} eq 'MESSAGE');
+        # - This code needs to be generalised (maybe it belongs in parts()?)
+        # - Should every message should have HEAD (actually MIME) and TEXT?
+        #   at least dovecot and iplanet appear to allow this even for
+        #   non-multipart sections
+        my $pno   = $partno;
+        my $stype = $self->{bodytype} || "";
+        my $ptype = $p->{bodytype} || "";
+
+        # a message and the multipart inside of it "collapse together"
+        if ($partno == 1 and $stype eq 'MESSAGE' and $ptype eq 'MULTIPART') {
+            $pno = "TEXT";
+            $p->{_prefix} = "$prefix";
+        }
+        else {
+            $p->{_prefix} = "$prefix$partno";
+        }
         $p->{_id}   ||= "$prefix$pno";
 
         push @parts, $p, $p->{bodystructure} ? $p->bodystructure : ();
