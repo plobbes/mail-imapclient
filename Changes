@@ -11,7 +11,10 @@ version 3.25: Tue May 25 16:25:23 EDT 2010
 	- rt.cpan.org#57337: Correctly handle multiparts in BodyStructure.pm
 	  [Robert Norris]
 	  fixes in Mail::IMAPClient::BodyStructure::bodystructure for
-	  bugs still in the previous release
+	  bugs still in release 3.24
+	- rt.cpan.org#57659: install fails when using cPanel GUI
+	  [Ken Parisi]
+	  hack Makefile.PL to use alarm() and timeout prompt() gracefully
 	- relax t/basic.t logout() error check (allow 'BYE' instead of 'OK')
 	- left examples/idle.pl out of MANIFEST for 3.24
 
