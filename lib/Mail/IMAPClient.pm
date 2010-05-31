@@ -1191,9 +1191,9 @@ sub body_string {
     }
 
     my $popped;
-    $popped = pop @$ref    # (-: vi
-      until ( $popped && $popped =~ /\)$CRLF$/o )    # (-: vi
-      || !grep /\)$CRLF$/o, @$ref;
+    $popped = pop @$ref
+      until ( $popped && $popped =~ /^\)$CRLF$/o )
+      || !grep /^\)$CRLF$/o, @$ref;
 
     if ( $head =~ /BODY\[TEXT\]\s*$/i ) {            # Next line is a literal
         $string .= shift @$ref while @$ref;
