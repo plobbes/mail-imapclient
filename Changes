@@ -10,6 +10,7 @@ version 3.26: Fri Jan 21 16:27:31 EST 2011
 	- rt.cpan.org#60045: Logout error if delay between BYE and tagged OK
 	  [Armin Wolfermann]
 	  no longer set an error when this happens
+	- Update README and cleanup several old or out of date files
 
 version 3.25: Fri May 28 00:07:40 EDT 2010
 	- fix body_string parsing bug and added tests in t/body_string.t

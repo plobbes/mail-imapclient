@@ -1,10 +1,7 @@
-COPYRIGHT
 Changes
-INSTALL
 MANIFEST
 Makefile.PL
 README
-TODO
 examples/build_dist.pl
 examples/build_ldif.pl
 examples/cleanTest.pl
@@ -30,7 +27,6 @@ lib/Mail/IMAPClient/Thread.grammar
 lib/Mail/IMAPClient/Thread.pm
 lib/Mail/IMAPClient/Thread.pod
 prepare_dist
-sample.perldb
 t/basic.t
 t/body_string.t
 t/bodystructure.t
