@@ -399,6 +399,6 @@ sub ok_relaxed_logout {
     my $imap = shift;
     local ($@);
     my $rc = $imap->logout;
-    my $err = $imap->LastError || "OK";
-    ok( ( $rc or $err =~ /^\* BYE/ ), "logout: $err" );
+    my $err = $imap->LastError || "";
+    ok( ( $rc or $err =~ /^\* BYE/ ), "logout" . ( $err ? ": $err" : "" ) );
 }

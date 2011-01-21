@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.25';
+our $VERSION = '3.26_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1467,10 +1467,15 @@ sub _get_response {
         $code =~ s/$CR?$LF?$//o;
         $code = uc($code) unless ( $good and $code eq $good );
 
-        # on successful LOGOUT $code is OK (not BYE!) see RFC 3501 sect 7.1.5
+        # RFC 3501 7.1.5: $code on successful LOGOUT is OK not BYE
+        # sometimes we may fail to wait long enough to read a tagged
+        # OK so don't be strict about setting an error on LOGOUT!
         if ( $code eq 'BYE' ) {
             $self->State(Unconnected);
-            $self->LastError($byemsg) if $byemsg;
+            if ($byemsg) {
+                $self->LastError($byemsg)
+                  unless ( $good and $code eq $good );
+            }
         }
     }
     elsif ( !$self->LastError ) {
@@ -1623,6 +1628,7 @@ sub _read_line {
     my $index   = $self->_next_index;
     my $timeout = $self->Timeout;
     my $readlen = $self->{Buffer} || 4096;
+    my $transno = $self->Transaction;
 
     my $temperrs = 0;
     my $maxagain = $self->Maxtemperrors;
@@ -1636,7 +1642,6 @@ sub _read_line {
           && !length $iBuffer    # and the input buffer has been MT'ed:
       )
     {
-        my $transno = $self->Transaction;
 
         if ($timeout) {
             my $rc = $self->_read_more( $socket, $timeout );
@@ -1922,7 +1927,7 @@ sub Unescape {
 
 sub logout {
     my $self = shift;
-    my $rc   = $self->_imap_command("LOGOUT");
+    my $rc   = $self->_imap_command( "LOGOUT", "BYE" );
     $self->_disconnect;
     return $rc;
 }
