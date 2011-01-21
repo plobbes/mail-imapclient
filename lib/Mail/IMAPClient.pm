@@ -1,6 +1,8 @@
 
 # _{name} methods are undocumented and meant to be private.
 
+require 5.008_001;
+
 use strict;
 use warnings;
 

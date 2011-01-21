@@ -2,6 +2,8 @@ use ExtUtils::MakeMaker;
 use warnings;
 use strict;
 
+use 5.008_001;
+
 my @missing;
 my %optional = (
     "Authen::NTLM"     => { for => "Authmechanism 'NTLM'" },
@@ -35,11 +37,12 @@ MSG
 }
 
 WriteMakefile(
-    NAME => 'Mail::IMAPClient',
-    ,
-    ABSTRACT     => 'IMAP4 client library',
-    VERSION_FROM => 'lib/Mail/IMAPClient.pm',
-    PREREQ_PM    => {
+    NAME             => 'Mail::IMAPClient',
+    AUTHOR           => 'Phil Pearl (Lobbes) <phil@zimbra.com>',
+    ABSTRACT         => 'IMAP4 client library',
+    VERSION_FROM     => 'lib/Mail/IMAPClient.pm',
+    MIN_PERL_VERSION => '5.008',
+    PREREQ_PM        => {
         'Carp'              => 0,
         'Errno'             => 0,
         'Fcntl'             => 0,
@@ -54,10 +57,6 @@ WriteMakefile(
         'File::Temp'        => 0,
     },
     clean => { FILES => 'test.txt' },
-    $] >= 5.005
-    ?    ## keywords supported since 5.005
-      ( AUTHOR => 'Phil Pearl (Lobbes) <phil@zimbra.com>' )
-    : ()
 );
 
 set_test_data();
