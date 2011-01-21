@@ -32,7 +32,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 77;
+      : plan tests    => 83;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -134,14 +134,36 @@ my $append_file_size;
     $append_file_size = $size;
 }
 
-# test append (string)
-{
-    ok( $imap->create($target), "create target" );
+ok( $imap->create($target), "create target" );
+ok( $imap->select($target), "select $target" );
 
+# Test append / append_string if we also have UID capability
+SKIP: {
+    skip "UIDPLUS not supported", 3 unless $imap->has_capability("UIDPLUS");
+
+    my $ouid = $imap->Uid();
+    $imap->Uid(1);
+
+    # test with date that has a leading space
+    my $d = " 1-Jan-2011 01:02:03 -0500";
+    my $uid = $imap->append_string( $target, $testmsg, undef, $d );
+    ok( defined $uid, "append test message to $target with date (uid=$uid)" );
+    ok( $imap->delete_message($uid), "delete_message $uid" );
+    ok( $imap->uidexpunge($uid),     "uidexpunge $uid" );
+
+    # multiple args joined internally in append()
+    $uid = $imap->append( $target, $testmsg, "Some extra text too" );
+    ok( defined $uid, "append test message to $target with date (uid=$uid)" );
+    ok( $imap->delete_message($uid), "delete_message $uid" );
+    ok( $imap->uidexpunge($uid),     "uidexpunge $uid" );
+
+    $imap->Uid($ouid);
+}
+
+# test append
+{
     my $uid = $imap->append( $target, $testmsg );
     ok( defined $uid, "append test message to $target" );
-
-    ok( $imap->select($target), "select $target" );
 
     my $msg = ( $uidplus and $uid ) ? $uid : ( $imap->messages )[0];
     my $size = $imap->size($msg);
@@ -151,7 +173,7 @@ my $append_file_size;
     my $string = $imap->message_string($msg);
     ok( defined $string, "returned string" );
 
-    cmp_ok( length($string), '==', $size, "string matches server size" );
+    cmp_ok( length($string), '==', $size, "string == server size" );
 
     {
         my ( $fh, $fn ) = tempfile UNLINK => 1;
@@ -162,7 +184,7 @@ my $append_file_size;
 
     cmp_ok( $size, '==', $append_file_size, "size matches string/file" );
 
-    # save message/folder for use below...
+    # save first message/folder for use below...
     #OFF ok( $imap->delete($target), "delete folder $target" );
 }
 

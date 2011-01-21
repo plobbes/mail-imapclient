@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.26_01';
+our $VERSION = '3.26_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2907,14 +2907,15 @@ sub append_string($$$;$$) {
     defined $text or $text = '';
 
     if ( defined $flags ) {
-        $flags =~ s/^\s+//g;
-        $flags =~ s/\s+$//g;
+        $flags =~ s/^\s+//;
+        $flags =~ s/\s+$//;
         $flags = "($flags)" if $flags !~ /^\(.*\)$/;
     }
 
+    # RFC 3501: date-day-fixed = (SP DIGIT) / 2DIGIT
     if ( defined $date ) {
-        $date =~ s/^\s+//g;
-        $date =~ s/\s+$//g;
+        $date =~ s/^\s+// if $date !~ /^\s\d/;
+        $date =~ s/\s+$//;
         $date = qq("$date") if $date !~ /^"/;
     }
 
