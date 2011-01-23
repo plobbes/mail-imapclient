@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 20;
+use Test::More tests => 27;
 
 BEGIN { use_ok('Mail::IMAPClient::BodyStructure') or exit; }
 
@@ -98,3 +98,20 @@ $bsobj = Mail::IMAPClient::BodyStructure->new($bs9);
 ok( defined $bsobj, 'parsed ninth' );
 is_deeply( [ $bsobj->parts ], \@exp, 'bs9 parts' )
   or diag( join(" ", $bsobj->parts ) );
+
+# envelope
+# date, subject, from, sender, reply-to, to, cc, bcc, in-reply-to, message-id
+{
+    my $resp = q{* 2 FETCH (UID 42895 ENVELOPE ("Mon, 29 Nov 2010 18:28:23 +0200" "subj" (("Phil Pearl" NIL "phil+from" "dom.loc")) (("Phil Pearl" NIL "phil+sender" "dom.loc")) () ((NIL NIL "phil+to" "dom.loc")) NIL NIL NIL "<msgid>"))};
+    my $env = Mail::IMAPClient::BodyStructure::Envelope->new($resp);
+    is( $env->subject, "subj", "subject" );
+    is( $env->inreplyto, "NIL", "inreplyto" );
+    is( $env->messageid, "<msgid>", "messageid" );
+    is( $env->bcc, "NIL", "bcc" );
+    is( $env->cc, "NIL", "cc" );
+    is( $env->replyto, "NIL", "replyto" );
+
+    # personalname mailboxname hostname sourcename
+    my $to = $env->to_addresses;
+    is_deeply( $to, [ '<phil+to@dom.loc>' ], "to_addresses" );
+}

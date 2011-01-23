@@ -32,6 +32,7 @@ HTML:		/"HTML"|HTML/i 		{ $return = "HTML"   }
 MESSAGE:	/^"MESSAGE"|^MESSAGE/i 	{ $return = "MESSAGE"}
 RFC822:		/^"RFC822"|^RFC822/i  	{ $return = "RFC822" }
 NIL:		/^NIL/i			{ $return = "NIL"    }
+RFCNONCOMPLY:	/^\(\)/i		{ $return = "NIL"    }
 NUMBER:		/^(\d+)/		{ $return = $item[1] }
 
 # Strings:
@@ -91,7 +92,7 @@ inreplyto:	NIL | STRING
 messageid:	NIL | STRING
 date:		NIL | STRING
 
-ADDRESSES:	NIL
+ADDRESSES:	NIL | RFCNONCOMPLY
 	| "(" addressstruct(s) ")" { $return = $item{'addressstruct(s)'} }
 
 cc:		ADDRESSES
