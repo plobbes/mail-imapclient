@@ -575,7 +575,7 @@ Example:
   my $new_msg_uid = $imap->append_file(
       $folder,
       $filename,
-      [ undef, flags, date ] # optional
+      [ undef, $flags, $date ] # optional
   ) or die "Could not append_file: ", $imap->LastError;
 
 The B<append_file> method adds a message to the specified folder.  It
@@ -583,7 +583,12 @@ takes two arguments, the name of the folder to append the message to,
 and the file name of an RFC822-formatted message.
 
 Note: The brackets in the example indicate optional arguments; they do
-not mean that the argument should be an array reference.
+not mean that the argument should be an array reference.  The first
+optional argument is always undef as it was deprecated.  The optional
+flags and date arguments are handled the same as append_string with
+the exception that if date is "1" (one) then the modification time
+(mtime) of the file will be used, otherwise the date should be in a
+valid RFC3501 date format.
 
 On success, the B<append_file> method returns the UID of the new
 message (if the server has the UIDPLUS capability) or a true value

@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.26_02';
+our $VERSION = '3.26_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2943,7 +2943,7 @@ sub append_string($$$;$$) {
 }
 
 sub append_file {
-    my ( $self, $folder, $file, $control, $flags, $use_filetime ) = @_;
+    my ( $self, $folder, $file, $control, $flags, $date ) = @_;
     my $mfolder = $self->Massage($folder);
 
     $flags ||= '';
@@ -2975,10 +2975,16 @@ sub append_file {
 
     binmode($fh);
 
-    my $date;
-    if ( $fh and $use_filetime ) {
-        my $f = $self->Rfc2060_datetime( ( stat($fh) )[9] );
-        $date = qq("$f");
+    # allow the date to be specified or even use mtime on file
+    if ($date) {
+        if ( $date eq "1" ) {
+            $date = $self->Rfc2060_datetime( ( stat($fh) )[9] );    # mtime
+        }
+        else {
+            $date =~ s/^\s+// if $date !~ /^\s\d/;
+            $date =~ s/\s+$//;
+        }
+        $date = qq("$date") if $date !~ /^"/;
     }
 
     # BUG? seems wasteful to do this always, provide a "fast path" option?

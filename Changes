@@ -5,8 +5,11 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.26: Sat Jan 22 22:34:08 EST 2011
-	- rt.cpan.org#63444: relax get_envelope, allow empty reply-to
+version 3.26: Sat Jan 22 23:27:25 EST 2011
+	- *rt.cpan.org#60945: append_file() does not interpret $date as expected
+	  [Jason Long]
+	  $date should now be 1 (to use the file mtime) or a valid RFC3501 date
+	- rt.cpan.org#63444: relax get_envelope(), allow empty reply-to
 	  [Nikolay Kravchenko]
 	- rt.cpan.org#61068: append_string can invalidate a good $date
 	- rt.cpan.org#60045: Logout error if delay between BYE and tagged OK
