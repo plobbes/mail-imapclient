@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.26_03';
+our $VERSION = '3.26_04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -86,10 +86,10 @@ BEGIN {
     foreach my $datum (
         qw(Authcallback Authmechanism Authuser Buffer Count Debug
         Debug_fh Domain Folder Ignoresizeerrors Keepalive
-        Maxcommandlength Maxtemperrors Password Peek Port
-        Prewritemethod Proxy Ranges Readmethod Reconnectretry
-        Server Showcredentials State Supportedflags Timeout Uid
-        User Ssl Starttls)
+        Maxappendstringlength Maxcommandlength Maxtemperrors
+        Password Peek Port Prewritemethod Proxy Ranges Readmethod
+        Reconnectretry Server Showcredentials Ssl Starttls State
+        Supportedflags Timeout Uid User)
       )
     {
         no strict 'refs';
@@ -254,19 +254,20 @@ sub _remove_doubles(@) {
 sub new {
     my $class = shift;
     my $self  = {
-        LastError        => "",
-        Uid              => 1,
-        Count            => 0,
-        Fast_io          => 1,
-        Clear            => 5,
-        Keepalive        => 0,
-        Maxcommandlength => 1000,
-        Maxtemperrors    => undef,
-        State            => Unconnected,
-        Authmechanism    => 'LOGIN',
-        Port             => 143,
-        Timeout          => 600,
-        History          => {},
+        LastError             => "",
+        Uid                   => 1,
+        Count                 => 0,
+        Fast_io               => 1,
+        Clear                 => 5,
+        Keepalive             => 0,
+        Maxappendstringlength => 1024**2,
+        Maxcommandlength      => 1000,
+        Maxtemperrors         => undef,
+        State                 => Unconnected,
+        Authmechanism         => 'LOGIN',
+        Port                  => 143,
+        Timeout               => 600,
+        History               => {},
     };
     while (@_) {
         my $k = ucfirst lc shift;
@@ -1197,7 +1198,7 @@ sub body_string {
       until ( $popped && $popped =~ /^\)$CRLF$/o )
       || !grep /^\)$CRLF$/o, @$ref;
 
-    if ( $head =~ /BODY\[TEXT\]\s*$/i ) {            # Next line is a literal
+    if ( $head =~ /BODY\[TEXT\]\s*$/i ) {    # Next line is a literal
         $string .= shift @$ref while @$ref;
         $self->_debug("String is now $string")
           if $self->Debug;
@@ -1526,7 +1527,7 @@ sub _record {
 
 # _send_line handles literal data and supports the Prewritemethod
 sub _send_line {
-    my ( $self, $string, $suppress ) = ( shift, shift, shift );
+    my ( $self, $string, $suppress ) = @_;
 
     $string =~ s/$CR?$LF?$/$CRLF/o
       unless $suppress;
@@ -1929,7 +1930,7 @@ sub Unescape {
 
 sub logout {
     my $self = shift;
-    my $rc   = $self->_imap_command( "LOGOUT", "BYE" );
+    my $rc = $self->_imap_command( "LOGOUT", "BYE" );
     $self->_disconnect;
     return $rc;
 }
@@ -2894,44 +2895,69 @@ sub selectable {
     defined $info ? not( grep /NoSelect/i, @$info ) : undef;
 }
 
+# append( $self, $folder, $text [, $optmsg] )
+# - conserve memory and use $_[0] to avoid copying $text (it may be huge!)
+# - BUG?: should deprecate this method in favor of append_string
 sub append {
     my $self   = shift;
     my $folder = shift;
-    my $text   = @_ > 1 ? join( $CRLF, @_ ) : shift;
 
-    $self->append_string( $folder, $text );
+    # $message_string is whatever is left in @_
+    $self->append_string( $folder, ( @_ > 1 ? join( $CRLF, @_ ) : $_[0] ) );
 }
 
+sub _clean_flags {
+    my ( $self, $flags ) = @_;
+    $flags =~ s/^\s+//;
+    $flags =~ s/\s+$//;
+    $flags = "($flags)" if $flags !~ /^\(.*\)$/;
+    return $flags;
+}
+
+# RFC 3501: date-day-fixed = (SP DIGIT) / 2DIGIT
+sub _clean_date {
+    my ( $self, $date ) = @_;
+    $date =~ s/^\s+// if $date !~ /^\s\d/;
+    $date =~ s/\s+$//;
+    $date = qq("$date") if $date !~ /^"/;
+    return $date;
+}
+
+sub _append_command {
+    my ( $self, $folder, $flags, $date, $length ) = @_;
+    return join( " ",
+        "APPEND $folder",
+        ( $flags ? $flags : () ),
+        ( $date  ? $date  : () ),
+        "{" . $length . "}",
+    );
+}
+
+# append_string( $self, $folder, $text, $flags, $date )
+# - conserve memory and use $_[2] to avoid copying $text (it may be huge!)
 sub append_string($$$;$$) {
-    my $self   = shift;
-    my $folder = $self->Massage(shift);
-    my ( $text, $flags, $date ) = @_;
-    defined $text or $text = '';
+    my ( $self, $folder, $flags, $date ) = @_[ 0, 1, 3, 4 ];
 
-    if ( defined $flags ) {
-        $flags =~ s/^\s+//;
-        $flags =~ s/\s+$//;
-        $flags = "($flags)" if $flags !~ /^\(.*\)$/;
+    #my $text = $_[2]; # conserve memory and use $_[2] instead!
+    my $maxl = $self->Maxappendstringlength;
+
+    # on "large" strings use append_file to conserve memory
+    if ( $_[2] and $maxl and length( $_[2] ) > $maxl ) {
+        $self->_debug("append_string: using in memory file");
+        return $self->append_file( $folder, \( $_[2] ), undef, $flags, $date );
     }
 
-    # RFC 3501: date-day-fixed = (SP DIGIT) / 2DIGIT
-    if ( defined $date ) {
-        $date =~ s/^\s+// if $date !~ /^\s\d/;
-        $date =~ s/\s+$//;
-        $date = qq("$date") if $date !~ /^"/;
-    }
+    my $text = defined( $_[2] ) ? $_[2] : '';
 
+    $folder = $self->Massage($folder);
+    $flags  = $self->_clean_flags($flags) if ( defined $flags );
+    $date   = $self->_clean_date($date) if ( defined $date );
     $text =~ s/\r?\n/$CRLF/og;
 
-    my $command =
-        "APPEND $folder "
-      . ( $flags ? "$flags " : "" )
-      . ( $date  ? "$date "  : "" ) . "{"
-      . length($text)
-      . "}$CRLF";
+    my $cmd = $self->_append_command( $folder, $flags, $date, length($text) );
+    $cmd .= $CRLF . $text . $CRLF;
 
-    $command .= $text . $CRLF;
-    $self->_imap_command( { addcrlf => 0 }, $command ) or return undef;
+    $self->_imap_command( { addcrlf => 0 }, $cmd ) or return undef;
 
     my $data = join '', $self->Results;
 
@@ -2942,12 +2968,10 @@ sub append_string($$$;$$) {
     return $ret;
 }
 
+# BUG?: not much/any savings on cygwin perl 5.10 when using in memory file
+# BUG?: we do not retry if sending data fails after getting the OK to send
 sub append_file {
     my ( $self, $folder, $file, $control, $flags, $date ) = @_;
-    my $mfolder = $self->Massage($folder);
-
-    $flags ||= '';
-    my $fflags = $flags =~ m/^\(.*\)$/ ? $flags : "($flags)";
 
     my @err;
     push( @err, "folder not specified" )
@@ -2957,14 +2981,18 @@ sub append_file {
     if ( !defined($file) ) {
         push( @err, "file not specified" );
     }
-    elsif ( ref($file) ) {
+    elsif ( ref($file) and ref($file) ne "SCALAR" ) {
         $fh = $file;    # let the caller pass in their own file handle directly
     }
-    elsif ( !-f $file ) {
+    elsif ( !ref($file) and !-f $file ) {
         push( @err, "file '$file' not found" );
     }
     else {
-        $fh = IO::File->new( $file, 'r' )
+
+        # $file can be a name or a scalar reference (for in memory file)
+        # avoid IO::File bug handling scalar refs in perl <= 5.8.8?
+        # - buggy: $fh = IO::File->new( $file, 'r' )
+        open( $fh, "<", $file )
           or push( @err, "Unable to open file '$file': $!" );
     }
 
@@ -2975,16 +3003,13 @@ sub append_file {
 
     binmode($fh);
 
+    $folder = $self->Massage($folder)     if ( defined $folder );
+    $flags  = $self->_clean_flags($flags) if ( defined $flags );
+
     # allow the date to be specified or even use mtime on file
     if ($date) {
-        if ( $date eq "1" ) {
-            $date = $self->Rfc2060_datetime( ( stat($fh) )[9] );    # mtime
-        }
-        else {
-            $date =~ s/^\s+// if $date !~ /^\s\d/;
-            $date =~ s/\s+$//;
-        }
-        $date = qq("$date") if $date !~ /^"/;
+        $date = $self->Rfc3501_datetime( ( stat($fh) )[9] ) if ( $date eq "1" );
+        $date = $self->_clean_date($date);
     }
 
     # BUG? seems wasteful to do this always, provide a "fast path" option?
@@ -2998,18 +3023,12 @@ sub append_file {
         seek( $fh, 0, 0 );
     }
 
-    my $string = "APPEND $mfolder";
-    $string .= " $fflags" if ( $fflags ne "" );
-    $string .= " $date"   if ( defined($date) );
-    $string .= " {$length}";
-
-    my $rc = $self->_imap_command( $string, '+' );
+    my $cmd = $self->_append_command( $folder, $flags, $date, $length );
+    my $rc = $self->_imap_command( $cmd, '+' );
     unless ($rc) {
-        $self->LastError( "Error sending '$string': " . $self->LastError );
+        $self->LastError( "Error sending '$cmd': " . $self->LastError );
         return undef;
     }
-
-    my $count = $self->Count;
 
     # Now send the message itself
     my ( $buffer, $buflen ) = ( "", 0 );
@@ -3037,14 +3056,6 @@ sub append_file {
         # reduce buffer to desired size
         $buffer = substr( $buffer, 0, APPEND_BUFFER_SIZE );
 
-        $self->_record(
-            $count,
-            [
-                $self->_next_index($count), "INPUT",
-                '{' . length($buffer) . " bytes from $file}"
-            ]
-        );
-
         my $bytes_written = $self->_send_bytes( \$buffer );
         unless ($bytes_written) {
             $self->LastError( "Error appending message: " . $self->LastError );
@@ -3064,7 +3075,7 @@ sub append_file {
 
     # Now for the crucial test: Did the append work or not?
     # look for "<tag> (OK|BAD|NO)"
-    my $code = $self->_get_response($count) or return undef;
+    my $code = $self->_get_response( $self->Count ) or return undef;
 
     if ( $code eq 'OK' ) {
         my $data = join '', $self->Results;

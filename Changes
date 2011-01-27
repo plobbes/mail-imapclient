@@ -5,7 +5,20 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.26: Sat Jan 22 23:27:25 EST 2011
+version 3.26: Thu Jan 27 00:40:25 EST 2011
+        - *require Perl 5.8.1 as constant use is invalid on 5.6
+	- *rt.cpan.org#61292: memory consumption with message_string()/append()
+	   rt.cpan.org#61806: Major problem with one function in IMAPClient
+	  [Gilles Lamiral, Casey Duquette]
+	  + use @_ / $_[<num>] in critical places to avoid pass by
+	    value memory overhead
+	  + *new attribute Maxappendstringlength used by append{_string}()
+	    Holds the size (in bytes, default 1 MiB) that triggers
+	    when the message SCALAR(s) passed to these methods will be
+	    treated as an in memory file. Internally the call falls
+	    back to using append_file and internal memory usage
+	    becomes more efficient as a side effect.
+	- internal cleanup of append* methods for consistency in behavior/checks
 	- *rt.cpan.org#60945: append_file() does not interpret $date as expected
 	  [Jason Long]
 	  $date should now be 1 (to use the file mtime) or a valid RFC3501 date
@@ -16,7 +29,6 @@ version 3.26: Sat Jan 22 23:27:25 EST 2011
 	  [Armin Wolfermann]
 	  no longer set an error when this happens
 	- Update README and cleanup several old or out of date files
-        - require Perl 5.8.1 as constant use is invalid on 5.6
 
 version 3.25: Fri May 28 00:07:40 EDT 2010
 	- fix body_string parsing bug and added tests in t/body_string.t
