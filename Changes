@@ -5,23 +5,32 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.26: Thu Jan 27 00:40:25 EST 2011
+version 3.26: Fri Jan 28 09:49:21 EST 2011
         - *require Perl 5.8.1 as constant use is invalid on 5.6
+	- *rt.cpan.org#60945: append_file() does not interpret $date as expected
+	  [Jason Long]
+	  $date should now be 1 (to use the file mtime) or a valid RFC3501 date
 	- *rt.cpan.org#61292: memory consumption with message_string()/append()
 	   rt.cpan.org#61806: Major problem with one function in IMAPClient
 	  [Gilles Lamiral, Casey Duquette]
 	  + use @_ / $_[<num>] in critical places to avoid pass by
 	    value memory overhead
-	  + *new attribute Maxappendstringlength used by append{_string}()
-	    Holds the size (in bytes, default 1 MiB) that triggers
-	    when the message SCALAR(s) passed to these methods will be
-	    treated as an in memory file. Internally the call falls
-	    back to using append_file and internal memory usage
-	    becomes more efficient as a side effect.
-	- internal cleanup of append* methods for consistency in behavior/checks
-	- *rt.cpan.org#60945: append_file() does not interpret $date as expected
-	  [Jason Long]
-	  $date should now be 1 (to use the file mtime) or a valid RFC3501 date
+	  + use in memory files in a few critical places as that code
+	    path in Mail::IMAPClient is significantly more efficient
+	    with internal memory usage
+	  + *new attribute Maxappendstringlength used by append() and
+	    append_string() holds the size (in bytes, default 1 MiB)
+	    that triggers when message SCALAR(s) passed to these
+	    methods will be treated as an in memory file.
+	  + *append() and append_string() now call append_file() and
+	    use an im memory file when length($message) is greater
+	    than Maxappendstringlength; other minor code cleanup
+	  + *message_string() now calls message_to_file() and uses an
+	    in memory file
+	  + refactor message_to_file() to use internal _imap_uid_command()
+	  + update _read_line() to be more efficient w/CPU in critical
+	    section by pulling isa() checks out of main loop
+	- minor arg cleanup of noop() and tag_and_run()
 	- rt.cpan.org#63444: relax get_envelope(), allow empty reply-to
 	  [Nikolay Kravchenko]
 	- rt.cpan.org#61068: append_string can invalidate a good $date

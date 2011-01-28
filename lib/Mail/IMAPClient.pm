@@ -7,13 +7,12 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.26_04';
+our $VERSION = '3.26_05';
 
 use Mail::IMAPClient::MessageSet;
 
 use IO::Socket qw(:crlf SOL_SOCKET SO_KEEPALIVE);
 use IO::Select ();
-use IO::File   ();
 use Carp qw(carp);    #local $SIG{__WARN__} = \&Carp::cluck; #DEBUG
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
@@ -460,7 +459,7 @@ sub login {
 }
 
 sub noop {
-    my ( $self, $user ) = @_;
+    my ($self) = @_;
     $self->_imap_command("NOOP") ? $self->Results : undef;
 }
 
@@ -731,10 +730,8 @@ sub message_string {
     my $peek = $self->Peek      ? '.PEEK'        : '';
     my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
 
-    $self->fetch( $msg, $cmd )
-      or return undef;
-
-    my $string = $self->_transaction_literals;
+    my $string;
+    $self->message_to_file( \$string, $msg );
 
     unless ( $self->Ignoresizeerrors ) {    # Check size with expected size
         my $expected_size = $self->size($msg);
@@ -776,47 +773,40 @@ sub bodypart_string {
     $self->_transaction_literals;
 }
 
+# message_to_file( $self, $file, @msgs )
 sub message_to_file {
-    my $self = shift;
-    my $fh   = shift;
-    my $msgs = join ',', @_;
+    my ( $self, $file, @msgs ) = @_;
 
-    my $handle;
-    if ( ref $fh ) { $handle = $fh }
+    # $file can be a name or a scalar reference (for in memory file)
+    # avoid IO::File bug handling scalar refs in perl <= 5.8.8?
+    # - buggy: $fh = IO::File->new( $file, 'r' )
+    my $fh;
+    if ( ref $file and ref $file ne "SCALAR" ) {
+        $fh = $file;
+    }
     else {
-        $handle = IO::File->new(">>$fh");
-        unless ( defined($handle) ) {
-            $self->LastError("Unable to open $fh: $!");
+        open( $fh, ">>", $file );
+        unless ( defined($fh) ) {
+            $self->LastError("Unable to open file '$file': $!");
             return undef;
         }
-        binmode $handle;    # For those of you who need something like this...
     }
 
-    my $clear = $self->Clear;
-    $self->Clear($clear)
-      if $self->Count >= $clear && $clear > 0;
+    binmode($fh);
 
-    return undef unless defined $self->imap4rev1;
-    my $peek = $self->Peek      ? '.PEEK'        : '';
-    my $cmd  = $self->imap4rev1 ? "BODY$peek\[]" : "RFC822$peek";
-
-    my $uid    = $self->Uid ? "UID " : "";
-    my $trans  = $self->Count( $self->Count + 1 );
-    my $string = "$trans ${uid}FETCH $msgs $cmd";
-
-    $self->_record( $trans, [ 0, "INPUT", $string ] );
-
-    my $feedback = $self->_send_line($string);
-    unless ($feedback) {
-        $self->LastError( "Error sending '$string': " . $self->LastError );
+    unless (@msgs) {
+        $self->LastError("message_to_file: NO messages specified!");
         return undef;
     }
 
-    # look for "<tag> (OK|BAD|NO)"
-    my $code = $self->_get_response( { outref => $handle }, $trans )
-      or return undef;
+    my $peek = $self->Peek ? '.PEEK' : '';
+    $peek = sprintf( $self->imap4rev1 ? "BODY%s\[]" : "RFC822%s", $peek );
 
-    return $code eq 'OK' ? $self : undef;
+    my @args = ( join( ",", @msgs ), $peek );
+
+    return $self->_imap_uid_command( { outref => $fh }, "FETCH" => @args )
+      ? $self
+      : undef;
 }
 
 sub message_uid {
@@ -1276,9 +1266,10 @@ sub done {
     return $self->Results;
 }
 
+# tag_and_run( $self, $string, $good )
 sub tag_and_run {
-    my ( $self, $string, $good ) = @_;
-    $self->_imap_command( $string, $good ) or return undef;
+    my $self = shift;
+    $self->_imap_command(@_) or return undef;
     return $self->Results;
 }
 
@@ -1368,11 +1359,14 @@ sub _imap_command {
 #   addcrlf => 0|1  - suppress adding CRLF to $string
 #   addtag  => 0|1  - suppress adding $tag to $string
 #   tag     => $tag - use this $tag instead of incrementing $self->Count
+#   outref  => ...  - see _get_response()
 sub _imap_command_do {
     my $self   = shift;
     my $opt    = ref( $_[0] ) eq "HASH" ? shift : {};
     my $string = shift or return undef;
     my $good   = shift;
+
+    my @gropt = ( $opt->{outref} ? { outref => $opt->{outref} } : () );
 
     $opt->{addcrlf} = 1 unless exists $opt->{addcrlf};
     $opt->{addtag}  = 1 unless exists $opt->{addtag};
@@ -1406,7 +1400,7 @@ sub _imap_command_do {
     }
 
     # look for "<tag> (OK|BAD|NO|$good)" (or "+..." if $good is '+')
-    my $code = $self->_get_response( $tag, $good ) or return undef;
+    my $code = $self->_get_response( @gropt, $tag, $good ) or return undef;
 
     if ( $code eq 'OK' ) {
         return $self;
@@ -1431,7 +1425,9 @@ sub _get_response {
     # tag can be a ref (compiled regex) or we quote it or default to \S+
     my $qtag = ref($tag) ? $tag : defined($tag) ? quotemeta($tag) : qr/\S+/;
     my $qgood = ref($good) ? $good : defined($good) ? quotemeta($good) : undef;
-    my @readopt = defined( $opt->{outref} ) ? ( $opt->{outref} ) : ();
+
+    my $outref = $opt->{outref};
+    my @readopt = defined($outref) ? ($outref) : ();
 
     my ( $count, $out, $code, $byemsg ) = ( $self->Count, [], undef, undef );
     until ( defined($code) ) {
@@ -1490,10 +1486,13 @@ sub _get_response {
 }
 
 sub _imap_uid_command {
-    my ( $self, $cmd ) = ( shift, shift );
+    my $self = shift;
+    my @opt  = ref( $_[0] ) eq "HASH" ? (shift) : ();
+    my $cmd  = shift;
+
     my $args = @_ ? join( " ", '', @_ ) : '';
     my $uid = $self->Uid ? 'UID ' : '';
-    $self->_imap_command("$uid$cmd$args");
+    $self->_imap_command( @opt, "$uid$cmd$args" );
 }
 
 sub run {
@@ -1603,22 +1602,21 @@ sub _send_bytes($) {
 }
 
 # _read_line: read one line from the socket
-
-# It is also re-implemented in: message_to_file
 #
-# $output = $self->_read_line($literal_callback, $output_callback)
-#    Both input arguments are optional, but if supplied must either
+# $output = $self->_read_line($literal_callback)
+#    literal_callback is optional, but if supplied it must be either
 #    be a filehandle, coderef, or undef.
 #
-#    Returned argument is a reference to an array of arrays, ie:
+#    Returns a reference to an array of arrays, i.e.:
 #    $output = [
-#            [ $index, 'OUTPUT'|'LITERAL', $output_line ] ,
-#            [ $index, 'OUTPUT'|'LITERAL', $output_line ] ,
-#            ...     # etc,
-#    ];
+#        [ $index, 'OUTPUT|LITERAL', $output_line ],
+#        [ $index, 'OUTPUT|LITERAL', $output_line ],
+#        ...
+#    \];
 
+# BUG?: make memory more efficient
 sub _read_line {
-    my ( $self, $literal_callback, $output_callback ) = @_;
+    my ( $self, $literal_callback ) = @_;
 
     my $socket = $self->Socket;
     unless ( $self->IsConnected && $socket ) {
@@ -1632,6 +1630,21 @@ sub _read_line {
     my $timeout = $self->Timeout;
     my $readlen = $self->{Buffer} || 4096;
     my $transno = $self->Transaction;
+
+    my $literal_cbtype = "";
+    if ($literal_callback) {
+        if ( UNIVERSAL::isa( $literal_callback, 'GLOB' ) ) {
+            $literal_cbtype = 'GLOB';
+        }
+        elsif ( UNIVERSAL::isa( $literal_callback, 'CODE' ) ) {
+            $literal_cbtype = 'CODE';
+        }
+        else {
+            $self->LastError( "'$literal_callback' is an "
+                  . "invalid callback; must be a filehandle or CODE" );
+            return undef;
+        }
+    }
 
     my $temperrs = 0;
     my $maxagain = $self->Maxtemperrors;
@@ -1798,25 +1811,25 @@ sub _read_line {
                 }
             }
 
-            if ( !$literal_callback ) { ; }
-            elsif ( UNIVERSAL::isa( $literal_callback, 'GLOB' ) ) {
-                print $literal_callback $litstring;
-                $litstring = "";
-            }
-            elsif ( UNIVERSAL::isa( $literal_callback, 'CODE' ) ) {
-                $literal_callback->($litstring)
-                  if defined $litstring;
-            }
-            else {
-                $self->LastError( "'$literal_callback' is an "
-                      . "invalid callback; must be a filehandle or CODE" );
+            if ($literal_callback) {
+                if ( $literal_cbtype eq "GLOB" ) {
+                    print $literal_callback $litstring;
+                    $litstring = "";
+                }
+                elsif ( $literal_cbtype eq "CODE" ) {
+                    $literal_callback->($litstring)
+                      if defined $litstring;    # BUG? why the defined check?
+                }
             }
 
+            #TODO: if ( $literal_cbtype ne "GLOB" ) { ...
             push @$oBuffer, [ $index++, 'LITERAL', $litstring ];
         }
     }
 
-    $self->_debug( "Read: " . join "", map { "\t" . $_->[DATA] } @$oBuffer );
+    $self->_debug( "Read: " . join "", map { "\t" . $_->[DATA] } @$oBuffer )
+      if ( $self->Debug );
+
     @$oBuffer ? $oBuffer : undef;
 }
 
