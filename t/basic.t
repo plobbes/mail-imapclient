@@ -2,6 +2,7 @@
 
 use strict;
 use warnings;
+use IO::File qw();
 use Test::More;
 use File::Temp qw(tempfile);
 
