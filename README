@@ -24,8 +24,6 @@ The following are the minimum requirements for using Mail::IMAPClient:
 - RFC 3501 (IMAP4REV1) compatible IMAP server
     http://www.faqs.org/rfcs/rfc3501.html
 - Mail::IMAPClient (this package)
-    http://search.cpan.org/dist/Mail-IMAPClient/
-    or http://mail-imapclient.sf.net/
 
 INSTALLATION
 ============
@@ -56,6 +54,10 @@ Project Links
     http://rt.cpan.org/Public/Dist/Display.html?Name=Mail-IMAPClient
 - Source code repository (git):
     http://sourceforge.net/p/mail-imapclient/git/
+- CPAN releases:
+    http://search.cpan.org/dist/Mail-IMAPClient/
+- Project website
+    http://mail-imapclient.sf.net/
 
 COPYRIGHT AND LICENSE
 =====================
