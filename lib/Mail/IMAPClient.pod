@@ -549,24 +549,74 @@ error-prone and stalled the progress of this module.
 
 Example:
 
-  my $uid = $imap->append( $folder, $msg_text )
+  my $uid_or_true = $imap->append( $folder, $msgtext )
     or die "Could not append: ", $imap->LastError;
 
-The B<append> method adds a message to the specified folder.  It takes
-two arguments, the name of the folder to append the message to, and
-the text of the message (including headers).  Additional arguments are
-added to the message text, separated with <CR><LF>.
+WARNING: This method may be deprecated in the future, consider using
+L</append_string> instead of this method.
 
-On success, the B<append> method returns the UID of the new message
-(if the server has the UIDPLUS capability) or a true value otherwise.
-On error, C<undef> is returned and L</LastError> will be set.
+The B<append> method adds a message to the specified folder.  See
+L</append_string> for details as it is effectively an alias for that
+method.
+
+DEPRECATED BEHAVIOR: Additional arguments are added to the message
+text, separated with <CR><LF>.
+
+=head2 append_string
+
+Example:
+
+   # brackets indicate optional arguments (not array refs):
+   my $uidort = $imap->append_string( $folder, $msgtext [,$flags [,$date ] ] )
+       or die "Could not append_string: ", $imap->LastError;
+
+Arguments:
+
+=over 4
+
+=item $folder
+
+the name of the folder to append the message to
+
+=item $msgtext
+
+the message text (including headers) of the message
+
+=item $flags
+
+An optional list of flags to set.  The list must be specified as
+a space-separated list of flags, including any backslashes that may be
+necessary and optionally enclosed by parenthesis.
+
+=item $date
+
+An optional RFC3501 date argument to set as the internal date.  It
+should be in the format described for I<date_time> fields in RFC3501,
+i.e. "dd-Mon-yyyy hh:mm:ss +0000".
+
+If you want to specify a date/time but you don't want any flags then
+specify I<undef> as the third ($flags) argument.
+
+=back
+
+Returns:
+
+=over 4
+
+=item error: undef
+
+On error, undef can be returned regardless of LIST/SCALAR context.
+Check L</LastError> for details.
+
+=item success: UID or $imap
+
+With UIDPLUS the UID of the new message is returned otherwise a true
+value (currently $self) is returned.
+
+=back
 
 To protect against "bare newlines", B<append> will insert a carriage
 return before any newline that is "bare".
-
-Note that B<append> does not allow you to specify the internal date or
-initial flags of an appended message.  If you need this capability
-then use L</append_string>, below.
 
 =head2 append_file
 
@@ -574,26 +624,59 @@ Example:
 
   my $new_msg_uid = $imap->append_file(
       $folder,
-      $filename,
+      $file,
       [ undef, $flags, $date ] # optional
   ) or die "Could not append_file: ", $imap->LastError;
 
-The B<append_file> method adds a message to the specified folder.  It
-takes two arguments, the name of the folder to append the message to,
-and the file name of an RFC822-formatted message.
-
+The B<append_file> method adds a message to the specified folder.
 Note: The brackets in the example indicate optional arguments; they do
-not mean that the argument should be an array reference.  The first
-optional argument is always undef as it was deprecated.  The optional
-flags and date arguments are handled the same as append_string with
-the exception that if date is "1" (one) then the modification time
-(mtime) of the file will be used, otherwise the date should be in a
-valid RFC3501 date format.
+not mean that the argument should be an array reference.
 
-On success, the B<append_file> method returns the UID of the new
-message (if the server has the UIDPLUS capability) or a true value
-otherwise.  On error, C<undef> is returned and L</LastError> will be
-set.
+Arguments:
+
+=over 4
+
+=item $folder
+
+the name of the folder to append the message to
+
+=item $file
+
+a filename, filehandle or SCALAR reference which holds an
+RFC822-formatted message
+
+=item undef
+
+a deprecated argument used as a place holder for backwards
+compatibility
+
+=item $flags
+
+The optional argument is handled the same as append_string.
+
+=item $date
+
+The optional argument is handled the same as append_string (RFC3501
+date), with the exception that if $date is "1" (one) then the
+modification time (mtime) of the file will be used.
+
+=back
+
+Returns:
+
+=over 4
+
+=item error: undef
+
+On error, undef can be returned regardless of LIST/SCALAR context.
+Check L</LastError> for details.
+
+=item success: UID or $imap
+
+With UIDPLUS the UID of the new message is returned otherwise a true
+value (currently $self) is returned.
+
+=back
 
 To protect against "bare newlines", B<append_file> will insert a
 carriage return before any newline that is "bare".
@@ -604,41 +687,6 @@ messages to be appended without holding the whole file in memory.
 Version note: In 2.x an optional third argument to use for
 C<input_record_separator> was allowed, however this argument is
 ignored/not supported as of 3.x.
-
-=head2 append_string
-
-Example:
-
-   # brackets indicate optional arguments (not array refs):
-   my $uid = $imap->append_string( $folder, $text [ ,$flags [ ,$date ] ] )
-       or die "Could not append_string: $@\n";
-
-The B<append_string> method adds a message to the specified folder.
-It requires two arguments, the name of the folder to append the
-message to, and the text of the message (including headers).  The
-message text must be included in a single string (unlike L</append>,
-above).
-
-You can optionally specify a third and fourth argument to
-B<append_string>.  The third argument, if supplied, is the list of
-flags to set for the appended message.  The list must be specified as
-a space-separated list of flags, including any backslashes that may be
-necessary.  The enclosing parentheses that are required by RFC3501 are
-optional for B<append_string>.  The fourth argument, if specified, is
-the date to set as the internal date.  It should be in the format
-described for I<date_time> fields in RFC3501, i.e. "dd-Mon-yyyy
-hh:mm:ss +0000".
-
-If you want to specify a date/time but you don't want any flags then
-specify I<undef> as the third argument.
-
-On success, the B<append_string> method returns the UID of the new
-message (if the server has the UIDPLUS capability) or a true value
-otherwise.  On error, C<undef> is returned and L</LastError> will be
-set.
-
-To protect against "bare newlines", B<append_string> will insert a
-carriage return before any newline that is "bare".
 
 =head2 authenticate
 
@@ -1159,7 +1207,7 @@ function in later releases.
 
 This method is new with version 2.2.3 and is thus still experimental.
 If you decide to try this method and run into problems, please see the
-section on L<REPORTING BUGS>.
+section on L</REPORTING BUGS>.
 
 =head2 flags
 
@@ -3685,22 +3733,21 @@ number) of the last IMAP client command.
 
 =head1 REPORTING BUGS
 
-Please send bug reports to C<bug-Mail-IMAPClient@rt.cpan.org>
+Please send bug reports to C<bug-Mail-IMAPClient@rt.cpan.org> or
+http://rt.cpan.org/Public/Dist/Display.html?Name=Mail-IMAPClient
 
-=head1 COPYRIGHT
+=head1 COPYRIGHT AND LICENSE
 
-  Copyright 1999, 2000, 2001, 2002 The Kernen Group, Inc.
+  Copyright (C) 1999-2003 The Kernen Group, Inc.
+  Copyright (C) 2007-2009 Mark Overmeer
+  Copyright (C) 2010-2011 Phil Pearl (Lobbes)
   All rights reserved.
 
-  Copyright 2007, 2008, 2009 Mark Overmeer
-
-  Copyright 2010 Phil Pearl (Lobbes)
-
-This program is free software; you can redistribute under the same
-terms as Perl itself.
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either Perl version 5.8.0 or,
+at your option, any later version of Perl 5 you may have available.
 
 This program is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See either the
-GNU General Public License or the Artistic License for more
-details. All your base are belong to us.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See either the
+GNU General Public License or the Artistic License for more details.

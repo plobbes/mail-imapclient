@@ -5,7 +5,7 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.26_06: Fri Jan 28 14:08:29 EST 2011
+version 3.26: Fri Jan 28 16:00:26 EST 2011
         - *require Perl 5.8.1 as constant use is invalid on 5.6
 	- *rt.cpan.org#60945: append_file() does not interpret $date as expected
 	  [Jason Long]
@@ -18,10 +18,12 @@ version 3.26_06: Fri Jan 28 14:08:29 EST 2011
 	  + use in memory files in a few critical places as that code
 	    path in Mail::IMAPClient is significantly more efficient
 	    with internal memory usage
-	  + *new attribute Maxappendstringlength used by append() and
+	  + *new (undocumented/do-not-use-without-good-reason)
+	    attribute Maxappendstringlength used by append() and
 	    append_string() holds the size (in bytes, default 1 MiB)
 	    that triggers when message SCALAR(s) passed to these
-	    methods will be treated as an in memory file.
+	    methods will be treated as an in memory file.  This
+	    attribute will likely be removed in a future version.
 	  + *append() and append_string() now call append_file() and
 	    use an im memory file when length($message) is greater
 	    than Maxappendstringlength; other minor code cleanup
