@@ -32,6 +32,13 @@ version 3.26_06: Fri Jan 28 14:08:29 EST 2011
 	    section by pulling isa() checks out of main loop also
 	    conserve memory by not storing an extra copy of LITERAL
 	    data if the data was put into a filehandle from the caller
+	  + Memory/working set (KB) comparison (Perl 5.10 cygwin Win7):
+	    - test: message_string on 6.1M msg and then append 6.1M msg
+	      version | start | after message_string | after append
+	      --------+-------+----------------------+-------------
+	        2.2.9 |  7624 |                74404 |       131896
+	         3.25 |  7716 |                74408 |       156532
+	         3.26 |  7684 |                33372 |        42608
 	- minor arg cleanup of noop() and tag_and_run()
 	- rt.cpan.org#63444: relax get_envelope(), allow empty reply-to
 	  [Nikolay Kravchenko]
