@@ -5,7 +5,7 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.26: Fri Jan 28 09:49:21 EST 2011
+version 3.26_06: Fri Jan 28 14:08:29 EST 2011
         - *require Perl 5.8.1 as constant use is invalid on 5.6
 	- *rt.cpan.org#60945: append_file() does not interpret $date as expected
 	  [Jason Long]
@@ -29,7 +29,9 @@ version 3.26: Fri Jan 28 09:49:21 EST 2011
 	    in memory file
 	  + refactor message_to_file() to use internal _imap_uid_command()
 	  + update _read_line() to be more efficient w/CPU in critical
-	    section by pulling isa() checks out of main loop
+	    section by pulling isa() checks out of main loop also
+	    conserve memory by not storing an extra copy of LITERAL
+	    data if the data was put into a filehandle from the caller
 	- minor arg cleanup of noop() and tag_and_run()
 	- rt.cpan.org#63444: relax get_envelope(), allow empty reply-to
 	  [Nikolay Kravchenko]

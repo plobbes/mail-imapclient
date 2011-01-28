@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.26_05';
+our $VERSION = '3.26_06';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1628,16 +1628,16 @@ sub _read_line {
     my $oBuffer = [];
     my $index   = $self->_next_index;
     my $timeout = $self->Timeout;
-    my $readlen = $self->{Buffer} || 4096;
+    my $readlen = $self->Buffer || 4096;
     my $transno = $self->Transaction;
 
     my $literal_cbtype = "";
     if ($literal_callback) {
-        if ( UNIVERSAL::isa( $literal_callback, 'GLOB' ) ) {
-            $literal_cbtype = 'GLOB';
+        if ( UNIVERSAL::isa( $literal_callback, "GLOB" ) ) {
+            $literal_cbtype = "GLOB";
         }
-        elsif ( UNIVERSAL::isa( $literal_callback, 'CODE' ) ) {
-            $literal_cbtype = 'CODE';
+        elsif ( UNIVERSAL::isa( $literal_callback, "CODE" ) ) {
+            $literal_cbtype = "CODE";
         }
         else {
             $self->LastError( "'$literal_callback' is an "
@@ -1738,11 +1738,12 @@ sub _read_line {
                 $litstring = $iBuffer;
                 $iBuffer   = '';
 
+                my $litreadb = length($litstring);
                 my $temperrs = 0;
                 my $maxagain = $self->Maxtemperrors;
                 undef $maxagain if $maxagain and lc($maxagain) eq 'unlimited';
 
-                while ( $expected_size > length $litstring ) {
+                while ( $expected_size > $litreadb ) {
                     if ($timeout) {
                         my $rc = $self->_read_more( $socket, $timeout );
                         return undef unless ( $rc > 0 );
@@ -1751,11 +1752,11 @@ sub _read_line {
                         CORE::select( undef, undef, undef, 0.025 );
                     }
 
-                    my $ret = $self->_sysread(
-                        $socket, \$litstring,
-                        $expected_size - length $litstring,
-                        length $litstring
-                    );
+                    # $litstring is emptied when $literal_cbtype is GLOB
+                    my $ret =
+                      $self->_sysread( $socket, \$litstring,
+                        $expected_size - $litreadb,
+                        length($litstring) );
 
                     if ($timeout) {
                         if ( defined $ret ) {
@@ -1781,15 +1782,23 @@ sub _read_line {
                     }
 
                     # EOF: note IO::Socket::SSL does not support eof()
-                    if ( defined $ret && $ret == 0 ) {
+                    if ( defined $ret and $ret == 0 ) {
                         $emsg = "socket closed while reading data from server";
                         $self->State(Unconnected);
                     }
+                    elsif ( defined $ret and $ret > 0 ) {
+                        $litreadb += $ret;
+
+                        # conserve memory when using literal_callback GLOB
+                        if ( $literal_cbtype eq "GLOB" ) {
+                            print $literal_callback $litstring;
+                            $litstring = "" unless ($emsg);
+                        }
+                    }
 
                     $self->_debug( "Received ret="
-                          . ( defined($ret) ? "$ret " : "<undef> " )
-                          . length($litstring)
-                          . " of $expected_size" );
+                          . ( defined($ret) ? $ret : "<undef>" )
+                          . " $litreadb of $expected_size" );
 
                     # save errors and return
                     if ($emsg) {
@@ -1811,19 +1820,17 @@ sub _read_line {
                 }
             }
 
-            if ($literal_callback) {
+            if ( defined $litstring ) {
                 if ( $literal_cbtype eq "GLOB" ) {
                     print $literal_callback $litstring;
-                    $litstring = "";
                 }
                 elsif ( $literal_cbtype eq "CODE" ) {
-                    $literal_callback->($litstring)
-                      if defined $litstring;    # BUG? why the defined check?
+                    $literal_callback->($litstring);
                 }
             }
 
-            #TODO: if ( $literal_cbtype ne "GLOB" ) { ...
-            push @$oBuffer, [ $index++, 'LITERAL', $litstring ];
+            push @$oBuffer, [ $index++, 'LITERAL', $litstring ]
+              if ( $literal_cbtype ne "GLOB" );
         }
     }
 
@@ -1833,7 +1840,7 @@ sub _read_line {
     @$oBuffer ? $oBuffer : undef;
 }
 
-sub _sysread($$$$) {
+sub _sysread {
     my ( $self, $fh, $buf, $len, $off ) = @_;
     my $rm = $self->Readmethod;
     $rm ? $rm->(@_) : sysread( $fh, $$buf, $len, $off );
