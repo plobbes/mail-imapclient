@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.26_07';
+our $VERSION = '3.26';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -257,7 +257,7 @@ sub new {
         Uid                   => 1,
         Count                 => 0,
         Fast_io               => 1,
-        Clear                 => 5,
+        Clear                 => 2,
         Keepalive             => 0,
         Maxappendstringlength => 1024**2,
         Maxcommandlength      => 1000,
@@ -819,305 +819,72 @@ sub message_uid {
     return undef;
 }
 
-#???? this code is very clumsy, and currently probably broken.
-#  Why not use a pipe???
-#  Is a quadratic slowdown not much simpler and better???
-#  Shouldn't the slowdowns extend over multiple messages?
-#  --> create clean read and write methods
-
+# cleaned up and simplified but see TODO in code...
 sub migrate {
-    my ( $self, $peer, $msgs, $folder ) = @_;
-    my $toSock = $peer->Socket, my $fromSock = $self->Socket;
-    my $bufferSize = $self->Buffer || 4096;
-
-    local $SIG{PIPE} = 'IGNORE';    # avoid SIGPIPE on syswrite, handle as error
+    my ( $self, $peer, $msgs, $folder, $dfolder ) = @_;
 
     unless ( $peer and $peer->IsConnected ) {
-        $self->LastError( "Invalid or unconnected peer "
+        $self->LastError( ( $peer ? "Invalid" : "Unconnected" )
+            . " target "
               . ref($self)
-              . " object used as target for migrate. $@" );
+              . " object in migrate()"
+              . ( $peer ? ( ": " . $peer->LastError ) : "" ) );
         return undef;
     }
 
+    $folder = $self->Folder unless ( defined $folder );
     unless ($folder) {
-        unless ( $folder = $self->Folder ) {
-            $self->LastError("No folder selected on source mailbox.");
-            return undef;
-        }
-
-        unless ( $peer->exists($folder) || $peer->create($folder) ) {
-            $self->LastError( "Unable to create folder '$folder' on target "
-                  . "mailbox: "
-                  . $peer->LastError );
-            return undef;
-        }
+        $self->LastError("No folder selected on source mailbox.");
+        return undef;
     }
 
-    defined $msgs or $msgs = "ALL";
-    $msgs = $self->search("ALL")
-      if uc $msgs eq 'ALL';
-    return undef unless defined $msgs;
+    $dfolder = $folder unless ( defined $dfolder );
+    unless ( $peer->exists($dfolder) or $peer->create($dfolder) ) {
+        $self->LastError( "Create folder '$dfolder' on target host failed: "
+              . $peer->LastError );
+        return undef;
+    }
 
-    my $range = $self->Range($msgs);
-    my $clear = $self->Clear;
+    if ( !defined $msgs or uc($msgs) eq "ALL" ) {
+        $msgs = $self->search("ALL") or return undef;
+    }
 
-    $self->_debug("Migrating the following msgs from $folder: $range");
-  MSG:
+    # message size and (internal) date
+    my @headers = qw(RFC822.SIZE INTERNALDATE FLAGS);
+    my $range   = $self->Range($msgs);
+
+    $self->_debug("Messages to migrate from '$folder': $range");
+
     foreach my $mid ( $range->unfold ) {
-        $self->_debug("Migrating message $mid in folder $folder");
 
-        my $leftSoFar = my $size = $self->size($mid);
-        return undef unless defined $size;
+        # fetch size internaldate and flags of original message
+        # - TODO: add flags here...
+        my $minfo = $self->fetch_hash( $mid, @headers )
+          or return undef;
 
-        # fetch internaldate and flags of original message:
-        my $intDate = $self->internaldate($mid);
-        return undef unless defined $intDate;
+        my ( $size, $date ) = @{ $minfo->{$mid} }{@headers};
+        return undef unless ( defined $size and defined $date );
+
+        $self->_debug("Copy message $mid (sz=$size,dt=$date) from '$folder'");
 
         my @flags = grep !/\\Recent/i, $self->flags($mid);
         my $flags = join ' ', $peer->supported_flags(@flags);
 
-        # set up transaction numbers for from and to connections:
-        my $trans  = $self->Count( $self->Count + 1 );
-        my $ptrans = $peer->Count( $peer->Count + 1 );
+        # TODO: - use File::Temp tempfile if $msg > bufferSize?
+        # read message to $msg
+        my $msg;
+        $self->message_to_file( \$msg, $mid )
+          or return undef;
 
-        # If msg size is less than buffersize then do whole msg in one
-        # transaction:
-        if ( $size <= $bufferSize ) {
-            my $new_mid =
-              $peer->append_string( $folder, $self->message_string($mid),
-                $flags, $intDate );
+        my $newid = $self->append_file( $dfolder, \$msg, undef, $flags, $date );
 
-            unless ( defined $new_mid ) {
-                $self->LastError( "Unable to append to $folder "
-                      . "on target mailbox. "
-                      . $peer->LastError );
-                return undef;
-            }
-
-            $self->_debug( "Copied message $mid in folder $folder to "
-                  . $peer->User . '@'
-                  . $peer->Server
-                  . ". New message UID is $new_mid" )
-              if $self->Debug;
-
-            $peer->_debug( "Copied message $mid in folder $folder from "
-                  . $self->User . '@'
-                  . $self->Server
-                  . ". New message UID is $new_mid" )
-              if $peer->Debug;
-
-            next MSG;
-        }
-
-        # otherwise break it up into digestible pieces:
-        return undef unless defined $self->imap4rev1;
-        my ( $cmd, $extract_size );
-        if ( $self->imap4rev1 ) {
-            $cmd = $self->Peek ? 'BODY.PEEK[]' : 'BODY[]';
-            $extract_size = sub { $_[0] =~ /\(.*BODY\[\]<\d+> \{(\d+)\}/i; $1 };
-        }
-        else {
-            $cmd = $self->Peek ? 'RFC822.PEEK' : 'RFC822';
-            $extract_size = sub { $_[0] =~ /\(RFC822\[\]<\d+> \{(\d+)\}/i; $1 };
-        }
-
-        # Now let's warn the peer that there's a message coming:
-        my $pstring =
-            "$ptrans APPEND "
-          . $self->Massage($folder)
-          . ( length $flags ? " ($flags)" : '' )
-          . qq( "$intDate" {$size});
-
-        $self->_debug("About to issue APPEND command to peer for msg $mid");
-
-        $peer->_record( $ptrans, [ 0, "INPUT", $pstring ] );
-        unless ( $peer->_send_line($pstring) ) {
-            $self->LastError( "Error sending '$pstring': " . $self->LastError );
+        unless ( defined $newid ) {
+            $self->LastError(
+                "Append to '$dfolder' on target failed: " . $peer->LastError );
             return undef;
         }
 
-        # Get the "+ Go ahead" response:
-        my $code;
-        until ( defined $code ) {
-            my $readSoFar  = 0;
-            my $fromBuffer = '';
-            $readSoFar += sysread( $toSock, $fromBuffer, 1, $readSoFar ) || 0
-              until $fromBuffer =~ /$CRLF/o;
-
-            $code =
-                $fromBuffer =~ /^\+/                  ? 'OK'
-              : $fromBuffer =~ /^\d+\s+(BAD|NO|OK)\b/ ? $1
-              :                                         undef;
-
-            $peer->_debug("$folder: received $fromBuffer from server");
-
-            if ( $fromBuffer =~ /^(\*\s+BYE.*?)$CR?$LF/oi ) {
-                $self->State(Unconnected);
-                $self->LastError($1);
-                return undef;
-            }
-
-            # ... and log it in the history buffers
-            $self->_record(
-                $trans,
-                [
-                    0,
-                    "OUTPUT",
-"Mail::IMAPClient migrating message $mid to $peer->User\@$peer->Server"
-                ]
-            );
-            $peer->_record( $ptrans, [ 0, "OUTPUT", $fromBuffer ] );
-        }
-
-        if ( $code ne 'OK' ) {
-            $self->_debug("Error writing to target host: $@");
-            next MIGMSG;
-        }
-
-        # Here is where we start sticking in UID if that parameter
-        # is turned on:
-        my $string = ( $self->Uid ? "UID " : "" ) . "FETCH $mid $cmd";
-
-        # Clean up history buffer if necessary:
-        $self->Clear($clear)
-          if $self->Count >= $clear && $clear > 0;
-
-        # position will tell us how far from beginning of msg the
-        # next IMAP FETCH should start (1st time start at offset zero):
-        my $position   = 0;
-        my $chunkCount = 0;
-        my $readSoFar  = 0;
-        while ( $leftSoFar > 0 ) {
-            my $take = min $leftSoFar, $bufferSize;
-            my $newstring = "$trans $string<$position.$take>";
-
-            $self->_record( $trans, [ 0, "INPUT", $newstring ] );
-            $self->_debug("Issuing migration command: $newstring");
-
-            unless ( $self->_send_line($newstring) ) {
-                $self->LastError( "Error sending '$newstring' to source IMAP: "
-                      . $self->LastError );
-                return undef;
-            }
-
-            my $chunk;
-            my $fromBuffer = "";
-            until ( $chunk = $extract_size->($fromBuffer) ) {
-                $fromBuffer = '';
-                sysread( $fromSock, $fromBuffer, 1, length $fromBuffer )
-                  until $fromBuffer =~ /$CRLF$/o;
-
-                $self->_record( $trans, [ 0, "OUTPUT", $fromBuffer ] );
-
-                if ( $fromBuffer =~ /^$trans\s+(?:NO|BAD)/ ) {
-                    $self->LastError($fromBuffer);
-                    next MIGMSG;
-                }
-                elsif ( $fromBuffer =~ /^$trans\s+OK/ ) {
-                    $self->LastError( "Unexpected good return code "
-                          . "from source host: $fromBuffer" );
-                    next MIGMSG;
-                }
-            }
-
-            $fromBuffer = "";
-            while ( $readSoFar < $chunk ) {
-                $readSoFar +=
-                  sysread( $fromSock, $fromBuffer, $chunk - $readSoFar,
-                    $readSoFar )
-                  || 0;
-            }
-
-            my $wroteSoFar = 0;
-            my $temperrs   = 0;
-            my $waittime   = .02;
-            my $maxwrite   = 0;
-            my $maxagain   = $self->Maxtemperrors;
-            undef $maxagain if $maxagain and lc($maxagain) eq 'unlimited';
-            my @previous_writes;
-
-            while ( $wroteSoFar < $chunk ) {
-                while ( $wroteSoFar < $readSoFar ) {
-                    my $ret =
-                      syswrite( $toSock, $fromBuffer, $chunk - $wroteSoFar,
-                        $wroteSoFar );
-
-                    if ( defined $ret ) {
-                        $wroteSoFar += $ret;
-                        $maxwrite = max $maxwrite, $ret;
-                        $temperrs = 0;
-                    }
-
-                    if ( $! == EPIPE or $! == ECONNRESET ) {
-                        $self->State(Unconnected);
-                        $self->LastError("Write failed '$!'");
-                        return undef;
-                    }
-
-                    if ( $! == EAGAIN || $ret == 0 ) {
-                        if ( defined $maxagain && $temperrs++ > $maxagain ) {
-                            $self->LastError("Persistent error '$!'");
-                            return undef;
-                        }
-
-                        $waittime = $self->_optimal_sleep( $maxwrite, $waittime,
-                            \@previous_writes );
-                        next;
-                    }
-
-                    $self->State(Unconnected)
-                      if ( $! == EPIPE or $! == ECONNRESET );
-                    $self->LastError("Write failed '$!'");
-                    return;    # no luck
-                }
-
-                $peer->_debug(
-                    "Chunk $chunkCount: wrote $wroteSoFar (of $chunk)");
-            }
-        }
-
-        $position += $readSoFar;
-        $leftSoFar -= $readSoFar;
-        my $fromBuffer = "";
-
-        # Finish up reading the server fetch response from the source system:
-        # look for "<trans> (OK|BAD|NO)"
-        $self->_debug("Reading from source: expecting 'OK' response");
-        $code = $self->_get_response($trans) or return undef;
-        return undef unless $code eq 'OK';
-
-        # Now let's send a CRLF to the peer to signal end of APPEND cmd:
-        unless ( $peer->_send_bytes( \$CRLF ) ) {
-            $self->LastError( "Error appending CRLF: " . $self->LastError );
-            return undef;
-        }
-
-        # Finally, let's get the new message's UID from the peer:
-        # look for "<tag> (OK|BAD|NO)"
-        $peer->_debug("Reading from target: expect new uid in response");
-        $code = $peer->_get_response($ptrans) or return undef;
-
-        my $new_mid = "unknown";
-        if ( $code eq 'OK' ) {
-            my $data = join '', $self->Results;
-
-            # look for something like return size or self if no size found:
-            # <tag> OK [APPENDUID <uid> <size>] APPEND completed
-            my $ret = $data =~ m#\s+(\d+)\]# ? $1 : undef;
-            $new_mid = $ret;
-        }
-
-        if ( $self->Debug ) {
-            $self->_debug( "Copied message $mid in folder $folder to "
-                  . $peer->User . '@'
-                  . $peer->Server
-                  . ". New Message UID is $new_mid" );
-
-            $peer->_debug( "Copied message $mid in folder $folder from "
-                  . $self->User . '@'
-                  . $self->Server
-                  . ". New Message UID is $new_mid" );
-        }
+        $self->_debug("Copied UID $mid in '$folder' to target UID $newid");
     }
 
     return $self;

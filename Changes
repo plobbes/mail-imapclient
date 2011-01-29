@@ -5,7 +5,7 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.26: Fri Jan 28 22:11:42 EST 2011
+version 3.26: Fri Jan 28 23:46:31 EST 2011
 	- *require Perl 5.8.1 as constant use is invalid on 5.6
 	- rt.cpan.org#63524: fetch_hash() parse errors
 	  [Brian Kroth]
@@ -13,7 +13,7 @@ version 3.26: Fri Jan 28 22:11:42 EST 2011
 	  + fixed handling of field names with a dash (e.g. X-SAVEDATE)
 	  + fetch_hash now uses Escaped_results() method
 	- *fixed Escaped_results() to properly join LITERAL data with
-          the data that comes before and after it
+	  the data that comes before and after it
 	- *rt.cpan.org#60945: append_file() does not interpret $date as expected
 	  [Jason Long]
 	  $date should now be 1 (to use the file mtime) or a valid RFC3501 date
@@ -55,6 +55,9 @@ version 3.26: Fri Jan 28 22:11:42 EST 2011
 	- rt.cpan.org#60045: Logout error if delay between BYE and tagged OK
 	  [Armin Wolfermann]
 	  no longer set an error when this happens
+	- rt.cpan.org#61062: migrate() errors
+	  [Johan Ekenberg]
+	  + rewrote migrate() to be functional and simple
 	- Update README and cleanup several old or out of date files
 
 version 3.25: Fri May 28 00:07:40 EDT 2010
