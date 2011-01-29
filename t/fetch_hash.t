@@ -9,7 +9,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 18;
+use Test::More tests => 19;
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
 
@@ -111,6 +111,19 @@ my @tests = (
         { "1" => { "BODY.PEEK[]" => q{foo}, }, },
     ],
     [
+        "escaped subject",
+        [ q{* 1 FETCH (UID 1 X-SAVEDATE "28-Jan-2011 16:52:31 -0500" FLAGS (\Seen) ENVELOPE ("Fri, 28 Jan 2011 00:03:30 -0500" "foo \\"bar\\" baz\'s" (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>")) } ],
+        [ [1], qw(UID X-SAVEDATE FLAGS ENVELOPE) ],
+        {
+            "1" => {
+                'X-SAVEDATE' => '28-Jan-2011 16:52:31 -0500',
+                'UID' => '1',
+                'FLAGS' => '\\Seen',
+                'ENVELOPE' => q{"Fri, 28 Jan 2011 00:03:30 -0500" "foo \\"bar\\" baz\'s" (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>"}
+            },
+        },
+    ],
+    [
         "real life example",
         [
 '* 1 FETCH (UID 541 FLAGS (\\Seen) INTERNALDATE "15-Sep-2009 20:05:45 +1000" RFC822.SIZE 771 BODY[HEADER.FIELDS (TO FROM DATE SUBJECT)]',
@@ -209,6 +222,10 @@ sub new {
 }
 
 sub fetch {
+    my ( $self, @args ) = @_;
+    return $self->{_next_fetch_response} || [];
+}
+sub Escaped_results {
     my ( $self, @args ) = @_;
     return $self->{_next_fetch_response} || [];
 }

@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.26_06';
+our $VERSION = '3.26_07';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1930,12 +1930,25 @@ sub _transaction_literals() {
 sub Escaped_results {
     my ( $self, $trans ) = @_;
     my @a;
-    foreach my $line ( grep defined, $self->Results($trans) ) {
+    my $prevwasliteral = 0;
+    foreach my $line ( grep defined, $self->_transaction($trans) ) {
+        my $data = $line->[DATA];
+
+        # literal is appended to previous data
         if ( $self->_is_literal($line) ) {
-            $line->[DATA] =~ s/([\\\(\)"$CRLF])/\\$1/og;
-            push @a, qq("$line->[DATA]");
+            $data =~ s/([\\\(\)"$CRLF])/\\$1/og;
+            $a[-1] .= qq( "$data");
+            $prevwasliteral = 1;
         }
-        else { push @a, $line->[DATA] }
+        else {
+            if ($prevwasliteral) {
+                $a[-1] .= $data;
+            }
+            else {
+                push( @a, $data );
+            }
+            $prevwasliteral = 0;
+        }
     }
 
     shift @a;    # remove cmd
@@ -2213,15 +2226,16 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
     my %words = map { uc($_) => 1 } @words;
 
-    my $output = $self->fetch( $msgs, "($what)" ) or return undef;
+    $self->fetch( $msgs, "($what)" ) or return undef;
+    my $output = $self->Escaped_results;
 
     while ( my $l = shift @$output ) {
         next if $l !~ m/^\*\s(\d+)\sFETCH\s\(/g;
         my ( $mid, $entry ) = ( $1, {} );
         my ( $key, $value );
       ATTR:
-        while ( $l !~ m/\G\s*\)\s*$/gc ) {
-            if ( $l =~ m/\G\s*([\w\d\.]+(?:\[[^\]]*\])?)\s*/gc ) {
+        while ( $l and $l !~ m/\G\s*\)\s*$/gc ) {
+            if ( $l =~ m/\G\s*([^\s\[]+(?:\[[^\]]*\])?)\s*/gc ) {
                 $key = uc($1);
             }
             elsif ( !defined $key ) {
@@ -2230,7 +2244,6 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
                 $self->LastError("Invalid item name in FETCH response: $l");
                 return undef;
             }
-
             if ( $l =~ m/\G\s*$/gc ) {
                 $value         = shift @$output;
                 $entry->{$key} = $value;
@@ -2263,7 +2276,7 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
                         $value .= $stuff;
                     }
                 }
-                m/\G\s*/gc;
+                $l =~ m/\G\s*/gc;
             }
             else {
                 $self->LastError("Invalid item value in FETCH response: $l");
