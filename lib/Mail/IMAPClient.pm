@@ -821,7 +821,7 @@ sub message_uid {
 
 # cleaned up and simplified but see TODO in code...
 sub migrate {
-    my ( $self, $peer, $msgs, $folder, $dfolder ) = @_;
+    my ( $self, $peer, $msgs, $folder ) = @_;
 
     unless ( $peer and $peer->IsConnected ) {
         $self->LastError( ( $peer ? "Invalid" : "Unconnected" )
@@ -838,7 +838,7 @@ sub migrate {
         return undef;
     }
 
-    $dfolder = $folder unless ( defined $dfolder );
+    my $dfolder = $folder;
     unless ( $peer->exists($dfolder) or $peer->create($dfolder) ) {
         $self->LastError( "Create folder '$dfolder' on target host failed: "
               . $peer->LastError );
@@ -1687,7 +1687,6 @@ sub Results(;$) {
     return wantarray ? @a : \@a;
 }
 
-# Don't know what it does, but used a few times.
 sub _transaction_literals() {
     my $self = shift;
     join '', map { $_->[DATA] }
@@ -1718,7 +1717,6 @@ sub Escaped_results {
         }
     }
 
-    shift @a;    # remove cmd
     return wantarray ? @a : \@a;
 }
 
@@ -1893,9 +1891,12 @@ sub get_envelope {
     $bs;
 }
 
-# fetch( [$seq_set|ALL], @msg_data_items )
+# fetch( [{option},] [$seq_set|ALL], @msg_data_items )
+# options:
+#   escaped => 0|1  # return Results or Escaped_results
 sub fetch {
     my $self = shift;
+    my $opt  = ref( $_[0] ) eq "HASH" ? shift : {};
     my $what = shift || "ALL";
 
     my $take = $what;
@@ -1914,7 +1915,7 @@ sub fetch {
         my $seq = $seq_set->[$x];
         $self->_imap_uid_command( FETCH => $seq, @fetch_att, @_ )
           or return undef;
-        my $res = $self->Results;
+        my $res = $opt->{escaped} ? $self->Escaped_results : $self->Results;
 
         # only keep last command and last response (* OK ...)
         $cmd = shift(@$res);
@@ -1965,6 +1966,7 @@ sub _split_sequence {
 }
 
 # fetch_hash( [$seq_set|ALL], @msg_data_items, [\%msg_by_ids] )
+# - TODO: make more efficient use of memory on large fetch results
 sub fetch_hash {
     my $self  = shift;
     my $uids  = ref $_[-1] ? pop @_ : {};
@@ -1993,8 +1995,8 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
     my %words = map { uc($_) => 1 } @words;
 
-    $self->fetch( $msgs, "($what)" ) or return undef;
-    my $output = $self->Escaped_results;
+    my $output = $self->fetch( { escaped => 1 }, $msgs, "($what)" )
+      or return undef;
 
     while ( my $l = shift @$output ) {
         next if $l !~ m/^\*\s(\d+)\sFETCH\s\(/g;
