@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.26';
+our $VERSION = '3.27';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -785,6 +785,7 @@ sub message_to_file {
         $fh = $file;
     }
     else {
+        $$file = "" if ( ref $file eq "SCALAR" and !defined $$file );
         open( $fh, ">>", $file );
         unless ( defined($fh) ) {
             $self->LastError("Unable to open file '$file': $!");
@@ -832,15 +833,20 @@ sub migrate {
         return undef;
     }
 
+    # sanity check to see if $self is same object as $peer
+    if ( $self eq $peer ) {
+        $self->LastError("dest must not be the same object as self");
+        return undef;
+    }
+
     $folder = $self->Folder unless ( defined $folder );
     unless ($folder) {
         $self->LastError("No folder selected on source mailbox.");
         return undef;
     }
 
-    my $dfolder = $folder;
-    unless ( $peer->exists($dfolder) or $peer->create($dfolder) ) {
-        $self->LastError( "Create folder '$dfolder' on target host failed: "
+    unless ( $peer->exists($folder) or $peer->create($folder) ) {
+        $self->LastError( "Create folder '$folder' on target host failed: "
               . $peer->LastError );
         return undef;
     }
@@ -876,11 +882,11 @@ sub migrate {
         $self->message_to_file( \$msg, $mid )
           or return undef;
 
-        my $newid = $self->append_file( $dfolder, \$msg, undef, $flags, $date );
+        my $newid = $peer->append_file( $folder, \$msg, undef, $flags, $date );
 
         unless ( defined $newid ) {
             $self->LastError(
-                "Append to '$dfolder' on target failed: " . $peer->LastError );
+                "Append to '$folder' on target failed: " . $peer->LastError );
             return undef;
         }
 

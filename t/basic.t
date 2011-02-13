@@ -33,7 +33,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 83;
+      : plan tests    => 85;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -177,6 +177,10 @@ SKIP: {
     cmp_ok( length($string), '==', $size, "string == server size" );
 
     {
+        my $var;
+        ok( $imap->message_to_file( \$var, $msg ), "to SCALAR ref" );
+        cmp_ok( length($var), '==', $size, "correct size" );
+
         my ( $fh, $fn ) = tempfile UNLINK => 1;
         ok( $imap->message_to_file( $fn, $msg ), "to file $fn" );
 

@@ -103,153 +103,6 @@ L</Domain>.
 
 =back
 
-=head2 Custom Authentication Mechanisms
-
-There are also a number of methods and parameters that you can use to
-build your own authentication mechanism.  All of the methods and
-parameters discussed in this section are described in more detail
-elsewhere in this document.  This section provides a starting point
-for building your own authentication mechanism.
-
-First of all, if you just want to do plain text authentication and
-your server is okay with that idea then you don't even need to read
-this section.
-
-Second of all, the intent of this section is to help you implement the
-authentication mechanism of your choice, but you will have to
-understand how that mechanism works.  There are I<lots> of
-authentication mechanisms, if your preferred mechanism is not
-currently supported but you manage to get it working please consider
-donating them to this module.  Patches and suggestions are always
-welcome.
-
-Support for add-on authentication mechanisms in Mail::IMAPClient is
-pretty straight forward.  You create a callback to be used to provide
-the response to the server's challenge.  The L</Authcallback> parameter
-contains a reference to the callback, which can be an anonymous
-subroutine or a named subroutine.  Then, you identify your
-authentication mechanism, either via the L</Authmechanism> parameter or
-as an argument to L</authenticate>.
-
-You may also need to provide a subroutine to encrypt (or whatever)
-data before it is sent to the server.  The L</Prewritemethod> parameter
-must contain a reference to this subroutine.  And, you will need to
-decrypt data from the server; a reference to the subroutine that does
-this must be stored in the L</Readmethod> parameter.
-
-This framework is based on the assumptions that a) the mechanism you
-are using requires a challenge-response exchange, and b) the mechanism
-does not fundamentally alter the exchange between client and server
-but merely wraps the exchange in a layer of encryption.  It also
-assumes that the line-oriented nature of the IMAP conversation is
-preserved; authentication mechanisms that break up messages into
-blocks of a predetermined size may still be possible but will
-certainly be more difficult to implement.
-
-Alternatively, if you have access to B<imtest>, a utility included in
-the Cyrus IMAP distribution, you can use that utility to broker your
-communications with the IMAP server.  This is quite easy to implement.
-An example, F<examples/imtestExample.pl>, can be found in the
-C<examples> subdirectory of the source distribution.
-
-The following list summarizes the methods and parameters that you may
-find useful in implementing advanced authentication:
-
-=over 4
-
-=item The authenticate method
-
-The L</authenticate> method uses the L</Authmechanism> parameter to
-determine how to authenticate with the server see the method
-documentation for details.
-
-=item Socket and RawSocket
-
-The L</Socket> and L</RawSocket> methods provide access to the socket
-connection.  The socket is typically automatically created by the
-L</connect> method, but if you are implementing an advanced
-authentication technique you may choose to set up your own socket
-connection and then set this parameter manually, bypassing the
-B<connect> method completely.  This is also useful if you want to use
-L<IO::Socket::INET> alternatives like L<IO::Socket::SSL> and need full
-control.
-
-L</RawSocket> simply gets/sets the socket without attempting any
-interaction on it.  In this case, you have to be sure to handle all
-the preliminary operations and manually set the Mail::IMAPClient
-object in sync with its actual status with respect to this socket (see
-below for additional parameters regarding this, especially the
-L</State> parameter).
-
-Unlike L</RawSocket>, L</Socket> attempts to carry on preliminary
-connection phases if the conditions apply.  If both parameters are
-present, this takes the precedence over L</RawSocket>.  If
-L</Starttls> is set, then the L</starttls> method will be called by
-L</Socket>.
-
-B<PLEASE NOTE> As of version 2.99_04 of this module, semantics for
-L</Socket> have changed to make it more "DWIM".  L</RawSocket> was
-introduced as a replacement for the L</Socket> parameter in older
-version.
-
-=item State, Server, User, Password, Proxy and Domain Parameters
-
-If you need to make your own connection to the server and perform your
-authentication manually, then you can set these parameters to keep
-your Mail::IMAPClient object in sync with its actual status.  Of
-these, only the L</State> parameter is always necessary.  The others
-need to be set only if you think your program will need them later.
-
-=item Authmechanism
-
-Set this to the value that AUTHENTICATE should send to the server as
-the authentication mechanism.  If you are brokering your own
-authentication then this parameter may be less useful.  It exists
-primarily so that you can set it when you call L</new> to instantiate
-your object.  The L</new> method will call L</connect>, which will
-call L</login>.  If L</login> sees that you have set an
-B<Authmechanism> then it will call B<authenticate>, using your
-B<Authmechanism> and B<Authcallback> parameters as arguments.
-
-=item Authcallback
-
-The L</Authcallback>, if set, holds a pointer to a subroutine
-(CODEREF).  The L</login> method will use this as the callback
-argument to the B<authenticate> method if the B<Authmechanism> and
-B<Authcallback> parameters are both set.  If you set B<Authmechanism>
-but not B<Authcallback> then the default callback for your mechanism
-will be used.  All supported authentication mechanisms have a default
-callback; in every other case not supplying the callback results in an
-error.
-
-Most advanced authentication mechanisms require a challenge-response
-exchange.  After the L</authenticate> method sends "<tag> AUTHENTICATE
-<Authmechanism>\015\012" to the IMAP server, the server replies with a
-challenge.  The L</authenticate> method then invokes the code whose
-reference is stored in the B<Authcallback> parameter as follows:
-
-  $Authcallback->($challenge, $imap)
-
-where C<$Authcallback> is the code reference stored in the
-B<Authcallback> parameter, C<$challenge> is the challenge received
-from the IMAP server, and C<$imap> is a pointer to the
-Mail::IMAPClient object.  The return value from the B<Authcallback>
-routine should be the response to the challenge, and that return value
-will be sent by the L</authenticate> method to the server.
-
-=item Prewritemethod/Readmethod
-
-The B<Prewritemethod> can hold a subroutine that will do whatever
-encryption is necessary and then return the result to the caller so it
-in turn can be sent to the server.
-
-The B<Readmethod> can hold a subroutine to be used to replace
-B<sysread> usually performed by Mail::IMAPClient.
-
-See L</Prewritemethod> and L</Readmethod> for details.
-
-=back
-
 =head2 Errors
 
 If you attempt an operation that results in an error, then you can
@@ -275,6 +128,11 @@ supplied to L</new>, it will attempt to call L</connect> and
 L</login>.  Any of these methods could fail and cause the L</new>
 method call to return C<undef> and leaving the variable C<$@> is set
 to an error message.
+
+WARNING: (due to historical API behavior) on errors, many methods may
+return undef regardless of LIST/SCALAR context.  Therefore, it may be
+wise to use most methods in a scalar context.  Regardless, check
+L</LastError> for details on errors.
 
 =head2 Transactions
 
@@ -1787,10 +1645,10 @@ C<$imap-E<gt>L</search>("ALL")>.
 
 Example:
 
-  $imap->migrate($imap_2, "ALL", $targetFolder )
-    or die "Could not migrate: $@\n";
+  $imap_src->migrate( $imap_dest, "ALL", $targetFolder )
+    or die "Could not migrate: ", $imap_src->LastError;
 
-The B<migrate> method copies the indicated messages B<from> the
+The B<migrate> method copies the indicated message(s) B<from> the
 currently selected folder B<to> another Mail::IMAPClient object's
 session.  It requires these arguments:
 
@@ -1812,40 +1670,22 @@ C<L</search>("ALL")>.
 
 =item 3.
 
-the folder name of a folder on the target mailbox to receive the
-message(s).  If this argument is not supplied or if I<undef> is
-supplied then a folder with the same name as the currently selected
-folder on the calling object will be created if necessary and used.
-If you specify something other then I<undef> for this argument, even
-if it's '$imap1-E<gt>Folder' or the name of the currently selected
-folder, then that folder will only be used if it exists on the target
-object's mailbox; if it does not exist then B<migrate> will fail.
+the name of the destination folder on the target mailbox to receive
+the message(s).  If this argument is not supplied or is I<undef> then
+the currently selected folder on the calling object will be used. The
+destination folder will be automatically created if necessary.
 
 =back
 
-The target Mail::IMAPClient object should not be the same as the
-source.  The source object is the calling object, i.e. the one whose
-B<migrate> method will be used.  It cannot be the same object as the
-one specified as the target, even if you are for some reason migrating
-between folders on the same account (which would be silly anyway,
-since L</copy> can do that much more efficiently).  If you try to use
-the same Mail::IMAPClient object for both the caller and the receiver
-then they'll both get all screwed up and it will be your fault because
-I just warned you and you didn't listen.
+The target ($imap_dest) Mail::IMAPClient object must not be the same
+object as the source ($imap_src).
 
-B<migrate> will download messages from the source in chunks to
-minimize memory usage.  The size of the chunks can be controlled by
-changing the source Mail::IMAPClient object's the L</Buffer>
-parameter.  The higher the L</Buffer> value, the faster the migration,
-but the more memory your program will require.  TANSTAAFL. (See the
-L</Buffer> parameter and eponymous accessor method, described above
-under the L</"Parameters"> section.)
+This method does not attempt to minimize memory usage.  In the future
+it could be enhanced to (optionaly) write message data to a temporary
+file to avoid storing the entire message in memory.
 
-The B<migrate> method uses Black Magic to hardwire the I/O between the
-two Mail::IMAPClient objects in order to minimize resource
-consumption.  If you have older scripts that used L</message_to_file>
-and L</append_file> to move large messages between IMAP mailboxes then
-you may want to try this method as a possible replacement.
+To work around potential network timeouts on large messages, consider
+setting L</Reconnectretry> to 1 on both $imap_src and $imap_dest.
 
 See also C<Supportedflags>.
 
@@ -3730,6 +3570,150 @@ I<STATUS> IMAP client command.)
 
 The B<Transaction> method returns the tag value (or transaction
 number) of the last IMAP client command.
+
+=head1 Custom Authentication Mechanisms
+
+If you just want to use plain text authentication or any of the
+supported L</"Advanced Authentication Mechanisms"> then there is no
+need to read this section.
+
+There are a number of methods and parameters that you can use to build
+your own authentication mechanism.  All of the methods and parameters
+discussed in this section are described in more detail elsewhere in
+this document.  This section provides a starting point for building
+your own authentication mechanism.
+
+There are I<many> authentication mechanisms out there, if your
+preferred mechanism is not currently supported but you manage to get
+it working please consider donating them to this module.  Patches and
+suggestions are always welcome.
+
+Support for add-on authentication mechanisms in Mail::IMAPClient is
+pretty straight forward.  You create a callback to be used to provide
+the response to the server's challenge.  The L</Authcallback> parameter
+contains a reference to the callback, which can be an anonymous
+subroutine or a named subroutine.  Then, you identify your
+authentication mechanism, either via the L</Authmechanism> parameter or
+as an argument to L</authenticate>.
+
+You may also need to provide a subroutine to encrypt (or whatever)
+data before it is sent to the server.  The L</Prewritemethod> parameter
+must contain a reference to this subroutine.  And, you will need to
+decrypt data from the server; a reference to the subroutine that does
+this must be stored in the L</Readmethod> parameter.
+
+This framework is based on the assumptions that a) the mechanism you
+are using requires a challenge-response exchange, and b) the mechanism
+does not fundamentally alter the exchange between client and server
+but merely wraps the exchange in a layer of encryption.  It also
+assumes that the line-oriented nature of the IMAP conversation is
+preserved; authentication mechanisms that break up messages into
+blocks of a predetermined size may still be possible but will
+certainly be more difficult to implement.
+
+Alternatively, if you have access to B<imtest>, a utility included in
+the Cyrus IMAP distribution, you can use that utility to broker your
+communications with the IMAP server.  This is quite easy to implement.
+An example, F<examples/imtestExample.pl>, can be found in the
+C<examples> subdirectory of the source distribution.
+
+The following list summarizes the methods and parameters that you may
+find useful in implementing advanced authentication:
+
+=over 4
+
+=item The authenticate method
+
+The L</authenticate> method uses the L</Authmechanism> parameter to
+determine how to authenticate with the server see the method
+documentation for details.
+
+=item Socket and RawSocket
+
+The L</Socket> and L</RawSocket> methods provide access to the socket
+connection.  The socket is typically automatically created by the
+L</connect> method, but if you are implementing an advanced
+authentication technique you may choose to set up your own socket
+connection and then set this parameter manually, bypassing the
+B<connect> method completely.  This is also useful if you want to use
+L<IO::Socket::INET> alternatives like L<IO::Socket::SSL> and need full
+control.
+
+L</RawSocket> simply gets/sets the socket without attempting any
+interaction on it.  In this case, you have to be sure to handle all
+the preliminary operations and manually set the Mail::IMAPClient
+object in sync with its actual status with respect to this socket (see
+below for additional parameters regarding this, especially the
+L</State> parameter).
+
+Unlike L</RawSocket>, L</Socket> attempts to carry on preliminary
+connection phases if the conditions apply.  If both parameters are
+present, this takes the precedence over L</RawSocket>.  If
+L</Starttls> is set, then the L</starttls> method will be called by
+L</Socket>.
+
+B<PLEASE NOTE> As of version 2.99_04 of this module, semantics for
+L</Socket> have changed to make it more "DWIM".  L</RawSocket> was
+introduced as a replacement for the L</Socket> parameter in older
+version.
+
+=item State, Server, User, Password, Proxy and Domain Parameters
+
+If you need to make your own connection to the server and perform your
+authentication manually, then you can set these parameters to keep
+your Mail::IMAPClient object in sync with its actual status.  Of
+these, only the L</State> parameter is always necessary.  The others
+need to be set only if you think your program will need them later.
+
+=item Authmechanism
+
+Set this to the value that AUTHENTICATE should send to the server as
+the authentication mechanism.  If you are brokering your own
+authentication then this parameter may be less useful.  It exists
+primarily so that you can set it when you call L</new> to instantiate
+your object.  The L</new> method will call L</connect>, which will
+call L</login>.  If L</login> sees that you have set an
+B<Authmechanism> then it will call B<authenticate>, using your
+B<Authmechanism> and B<Authcallback> parameters as arguments.
+
+=item Authcallback
+
+The L</Authcallback>, if set, holds a pointer to a subroutine
+(CODEREF).  The L</login> method will use this as the callback
+argument to the B<authenticate> method if the B<Authmechanism> and
+B<Authcallback> parameters are both set.  If you set B<Authmechanism>
+but not B<Authcallback> then the default callback for your mechanism
+will be used.  All supported authentication mechanisms have a default
+callback; in every other case not supplying the callback results in an
+error.
+
+Most advanced authentication mechanisms require a challenge-response
+exchange.  After the L</authenticate> method sends "<tag> AUTHENTICATE
+<Authmechanism>\015\012" to the IMAP server, the server replies with a
+challenge.  The L</authenticate> method then invokes the code whose
+reference is stored in the B<Authcallback> parameter as follows:
+
+  $Authcallback->($challenge, $imap)
+
+where C<$Authcallback> is the code reference stored in the
+B<Authcallback> parameter, C<$challenge> is the challenge received
+from the IMAP server, and C<$imap> is a pointer to the
+Mail::IMAPClient object.  The return value from the B<Authcallback>
+routine should be the response to the challenge, and that return value
+will be sent by the L</authenticate> method to the server.
+
+=item Prewritemethod/Readmethod
+
+The B<Prewritemethod> can hold a subroutine that will do whatever
+encryption is necessary and then return the result to the caller so it
+in turn can be sent to the server.
+
+The B<Readmethod> can hold a subroutine to be used to replace
+B<sysread> usually performed by Mail::IMAPClient.
+
+See L</Prewritemethod> and L</Readmethod> for details.
+
+=back
 
 =head1 REPORTING BUGS
 
