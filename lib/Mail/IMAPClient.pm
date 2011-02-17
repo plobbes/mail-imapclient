@@ -2976,11 +2976,11 @@ sub authenticate {
             encode_base64(            # [authname] user password
                 join(
                     chr(0),
-                    $client->User,
-                    ( defined $client->Proxy ? $client->Proxy : () ),
-                    $client->Password,
+                    defined $client->Proxy
+                    ? ( $client->User, $client->Proxy )
+                    : ( "", $client->User ),
+                    defined $client->Password ? $client->Password : "",
                 ),
-                ""
             );
         };
     }
