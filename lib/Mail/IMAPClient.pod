@@ -94,7 +94,13 @@ CRAM-MD5 requires the L<Digest::HMAC_MD5> module.
 
 =item PLAIN (SASL)
 
-PLAIN (SASL) authentication requires the use of the L</Proxy> parameter.
+PLAIN (SASL) authentication allows the optional use of the L</Proxy>
+parameter.  RFC 4616 documents this syntax for SASL PLAIN:
+
+  message = [authzid] UTF8NUL authcid UTF8NUL passwd
+
+When L</Proxy> is defined, L</User> is used as 'authzid' and L</Proxy>
+is used as 'authcid'.  Otherwise, L</User> is used as 'authcid'.
 
 =item NTLM
 

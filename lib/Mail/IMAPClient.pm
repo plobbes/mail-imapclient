@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.27';
+our $VERSION = '3.28_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2973,13 +2973,14 @@ sub authenticate {
     elsif ( $scheme eq 'PLAIN' ) {    # PLAIN SASL
         $response ||= sub {
             my ( $code, $client ) = @_;
-            encode_base64(
-                $client->User
-                  . chr(0)
-                  . $client->Proxy
-                  . chr(0)
-                  . $client->Password,
-                ''
+            encode_base64(            # [authname] user password
+                join(
+                    chr(0),
+                    $client->User,
+                    ( defined $client->Proxy ? $client->Proxy : () ),
+                    $client->Password,
+                ),
+                ""
             );
         };
     }

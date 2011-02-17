@@ -5,6 +5,10 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
+version 3.28_01: Thu Feb 17 11:01:59 EST 2011
+	- rt.cpan.org#65694: SASL PLAIN: bad order of login data
+	  [Willi Mann]
+
 version 3.27: Sun Feb 13 14:37:27 EST 2011
 	- rt.cpan.org#65694: migrate fails
 	  [Erik Colson]
