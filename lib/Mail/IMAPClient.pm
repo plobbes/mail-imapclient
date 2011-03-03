@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.28_01';
+our $VERSION = '3.28_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2207,13 +2207,13 @@ sub flags {
     $msg->cat(@_) if @_;
 
     # Send command
-    $self->fetch( $msg, "FLAGS" ) or return undef;
+    my $ref = $self->fetch( $msg, "FLAGS" ) or return undef;
 
     my $u_f     = $self->Uid;
     my $flagset = {};
 
     # Parse results, setting entry in result hash for each line
-    foreach my $line ( $self->Results ) {
+    foreach my $line ( @$ref ) {
         $self->_debug("flags: line = '$line'");
         if (
             $line =~ /\* \s+ (\d+) \s+ FETCH \s+    # * nnn FETCH
