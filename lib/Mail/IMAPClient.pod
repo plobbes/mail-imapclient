@@ -1312,7 +1312,8 @@ Example:
     or die "Could not internaldate: $@\n";
 
 B<internaldate> accepts one argument, a message id (or UID if the
-L</Uid> parameter is true), and returns that message's internal date.
+L</Uid> parameter is true), and returns that message's internal date
+or undef if the call fails or internal date is not returned.
 
 =head2 get_bodystructure
 

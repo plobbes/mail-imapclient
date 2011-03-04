@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.28_03';
+our $VERSION = '3.28_04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2674,10 +2674,8 @@ sub internaldate {
     my ( $self, $msg ) = @_;
     $self->_imap_uid_command( FETCH => $msg, 'INTERNALDATE' )
       or return undef;
-    my $internalDate = join '', $self->History;
-    $internalDate =~ s/^.*INTERNALDATE "//si;
-    $internalDate =~ s/\".*$//s;
-    $internalDate;
+    my $hist = join '', $self->History;
+    return $hist =~ /\bINTERNALDATE "([^"]*)"/i ? $1 : undef;
 }
 
 sub is_parent {
