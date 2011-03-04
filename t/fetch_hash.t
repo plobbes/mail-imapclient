@@ -9,7 +9,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 19;
+use Test::More tests => 20;
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
 
@@ -100,26 +100,56 @@ my @tests = (
     ],
     [
         "BODY.PEEK[] requests match BODY[] responses",
-        [ q{* 1 FETCH (BODY[] foo)} ],
+        [q{* 1 FETCH (BODY[] foo)}],
         [ [1], qw(BODY.PEEK[]) ],
         { "1" => { "BODY[]" => q{foo}, }, },
     ],
     [
         "BODY.PEEK[] requests match BODY.PEEK[] responses also",
-        [ q{* 1 FETCH (BODY.PEEK[] foo)} ],
+        [q{* 1 FETCH (BODY.PEEK[] foo)}],
         [ [1], qw(BODY.PEEK[]) ],
         { "1" => { "BODY.PEEK[]" => q{foo}, }, },
     ],
     [
-        "escaped subject",
-        [ q{* 1 FETCH (UID 1 X-SAVEDATE "28-Jan-2011 16:52:31 -0500" FLAGS (\Seen) ENVELOPE ("Fri, 28 Jan 2011 00:03:30 -0500" "foo \\"bar\\" baz\'s" (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>")) } ],
+        "escaped ENVELOPE subject",
+        [
+q{* 1 FETCH (UID 1 X-SAVEDATE "28-Jan-2011 16:52:31 -0500" FLAGS (\Seen) ENVELOPE ("Fri, 28 Jan 2011 00:03:30 -0500"},
+            q{foo "bar\\" (baz\\)},
+q{ (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>")) }
+        ],
         [ [1], qw(UID X-SAVEDATE FLAGS ENVELOPE) ],
         {
             "1" => {
                 'X-SAVEDATE' => '28-Jan-2011 16:52:31 -0500',
-                'UID' => '1',
-                'FLAGS' => '\\Seen',
-                'ENVELOPE' => q{"Fri, 28 Jan 2011 00:03:30 -0500" "foo \\"bar\\" baz\'s" (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>"}
+                'UID'        => '1',
+                'FLAGS'      => '\\Seen',
+                'ENVELOPE' =>
+q{"Fri, 28 Jan 2011 00:03:30 -0500" "foo \\"bar\\\\\\" (baz\\\\)" (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>"}
+            },
+        },
+    ],
+    [
+        "non-escaped BODY[HEADER.FIELDS (...)]",
+        [
+q{* 1 FETCH (UID 1 FLAGS () BODY[HEADER.FIELDS (TO FROM SUBJECT DATE)]},
+            'From: Phil Pearl (Lobbes) <phil+from@perkpartners.com>
+To: phil+to@perkpartners.com
+Subject: foo "bar\" (baz\)
+Date: Sat, 22 Jan 2011 20:43:58 -0500
+
+'
+        ],
+        [ [1], ( qw(FLAGS), 'BODY[HEADER.FIELDS (TO FROM SUBJECT DATE)]' ) ],
+        {
+            '1' => {
+                'BODY[HEADER.FIELDS (TO FROM SUBJECT DATE)]' =>
+                  'From: Phil Pearl (Lobbes) <phil+from@perkpartners.com>
+To: phil+to@perkpartners.com
+Subject: foo "bar\" (baz\)
+Date: Sat, 22 Jan 2011 20:43:58 -0500
+
+',
+                'FLAGS' => '',
             },
         },
     ],
@@ -225,6 +255,7 @@ sub fetch {
     my ( $self, @args ) = @_;
     return $self->{_next_fetch_response} || [];
 }
+
 sub Escaped_results {
     my ( $self, @args ) = @_;
     return $self->{_next_fetch_response} || [];

@@ -1062,16 +1062,14 @@ This would result in L<Data::Dumper> output similar to the following:
               }
      };
 
-By itself this method may be useful for, say, speeding up programs that
-want the size of every message in a folder.  It issues one command and
-receives one (possibly long!) response from the server.  However, it's
-true power lies in the as-yet-unwritten methods that will rely on this
-method to deliver even more powerful result hashes.  Look for more new
-function in later releases.
+By itself this method may be useful for tasks like obtaining the size
+of every message in a folder.  It issues one command and receives one
+(possibly long!) response from the server.
 
-This method is new with version 2.2.3 and is thus still experimental.
-If you decide to try this method and run into problems, please see the
-section on L</REPORTING BUGS>.
+If the fetch request causes the server to return data in a
+parenthesized list, the data within the parenthesized list may be
+escaped via the Escape() method. Use the Unescape() method to get the
+raw values back in this case.
 
 =head2 flags
 

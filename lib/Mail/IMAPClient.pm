@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.28_02';
+our $VERSION = '3.28_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1708,7 +1708,7 @@ sub Escaped_results {
 
         # literal is appended to previous data
         if ( $self->_is_literal($line) ) {
-            $data =~ s/([\\\(\)"$CRLF])/\\$1/og;
+            $data = $self->Escape($data);
             $a[-1] .= qq( "$data");
             $prevwasliteral = 1;
         }
@@ -1726,10 +1726,16 @@ sub Escaped_results {
     return wantarray ? @a : \@a;
 }
 
+sub Escape {
+    my $data = $_[1];
+    $data =~ s/([\\\"])/\\$1/og;
+    return $data;
+}
+
 sub Unescape {
-    my $whatever = $_[1];
-    $whatever =~ s/\\([\\\(\)"$CRLF])/$1/og;
-    $whatever;
+    my $data = $_[1];
+    $data =~ s/\\([\\\"])/$1/og;
+    return $data;
 }
 
 sub logout {
@@ -2001,7 +2007,7 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
     }
     my %words = map { uc($_) => 1 } @words;
 
-    my $output = $self->fetch( { escaped => 1 }, $msgs, "($what)" )
+    my $output = $self->fetch( $msgs, "($what)" )
       or return undef;
 
     while ( my $l = shift @$output ) {
@@ -2025,7 +2031,7 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
                 $l             = shift @$output;
                 next ATTR;
             }
-            elsif ( $l =~ m/\G(?:"([^"]+)"|([^()\s]+))\s*/gc ) {
+            elsif ( $l =~ m/\G(?:"(.*?)(?:(?<!\\)")|([^()\s]+))\s*/gc ) {
                 $value = defined $1 ? $1 : $2;
                 $entry->{$key} = $value;
                 next ATTR;
@@ -2049,6 +2055,13 @@ s/([\( ])FULL([\) ])/${1}FLAGS INTERNALDATE RFC822\.SIZE ENVELOPE BODY$2/i;
                     }
                     else {
                         $value .= $stuff;
+                    }
+
+                    # consume literal data if any
+                    if ( $l =~ m/\G\s*$/gc and scalar(@$output) ) {
+                        my $elit = $self->Escape( shift @$output );
+                        $l = shift @$output;
+                        $value .= ( length($value) ? " " : "" ) . qq{"$elit"};
                     }
                 }
                 $l =~ m/\G\s*/gc;
@@ -2213,7 +2226,7 @@ sub flags {
     my $flagset = {};
 
     # Parse results, setting entry in result hash for each line
-    foreach my $line ( @$ref ) {
+    foreach my $line (@$ref) {
         $self->_debug("flags: line = '$line'");
         if (
             $line =~ /\* \s+ (\d+) \s+ FETCH \s+    # * nnn FETCH

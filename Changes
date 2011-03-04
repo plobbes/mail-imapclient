@@ -5,7 +5,13 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.28_02: Tue Mar  1 11:32:56 EST 2011
+version 3.28_03: Thu Mar  3 23:48:33 EST 2011
+	- (redo) rt.cpan.org#63524: fetch_hash() parse errors
+	  [Mathias Reitinger]
+	  + fetch_hash: only Escape() data in parenthesized list
+	  + update fetch_hash test and add a new test
+	- do not touch CRLF in Escape()/Unescape()
+	- added Escape() method
 	- rt.cpan.org#66287: flags results truncated due to Maxcommandlength
 	  [Erik Colson]
 	- rt.cpan.org#65694: SASL PLAIN: bad order of login data
