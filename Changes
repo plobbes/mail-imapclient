@@ -8,7 +8,8 @@ Changes from 0.09    to 2.99_01 made by David Kernen
 version 3.28_04: Fri Mar  4 00:17:38 EST 2011
 	- rt.cpan.org#66004: internaldate() return undef if no internaldate in reply
 	  [Jason Long]
-	- (redo) rt.cpan.org#63524: fetch_hash() parse errors
+	- rt.cpan.org#66367: fetch_hash uses Escaped_results() in 3.26/3.27
+	  (redo) rt.cpan.org#63524: fetch_hash() parse errors
 	  [Mathias Reitinger]
 	  + fetch_hash: only Escape() data in parenthesized list
 	  + update fetch_hash test and add a new test
