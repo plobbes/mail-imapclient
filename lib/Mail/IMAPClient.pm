@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.29_01';
+our $VERSION = '3.29_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -87,7 +87,7 @@ BEGIN {
         Debug_fh Domain Folder Ignoresizeerrors Keepalive
         Maxappendstringlength Maxcommandlength Maxtemperrors
         Password Peek Port Prewritemethod Proxy Ranges Readmethod
-        Reconnectretry Server Showcredentials Ssl Starttls State
+        Reconnectretry Server Showcredentials Ssl Starttls
         Supportedflags Timeout Uid User)
       )
     {
@@ -460,7 +460,7 @@ sub login {
       or return undef;
 
     $self->State(Authenticated);
-    $self;
+    return $self;
 }
 
 sub noop {
@@ -1761,7 +1761,7 @@ sub _disconnect {
         local ($@);    # avoid stomping on global $@
         eval { $sock->close };
     }
-    $self;
+    return $self;
 }
 
 # LIST/XLIST/LSUB Response
@@ -3253,6 +3253,19 @@ sub unseen_count {
 
     $r =~ s/\D//g;
     return $r;
+}
+
+sub State($) {
+    my ( $self, $state ) = @_;
+
+    if ($state) {
+        $self->{State} = $state;
+
+        # discard cached capability info after authentication
+        delete $self->{CAPABILITY} if ( $state == Authenticated );
+    }
+
+    return $self->{State} || Unconnected;
 }
 
 sub Status          { shift->State }

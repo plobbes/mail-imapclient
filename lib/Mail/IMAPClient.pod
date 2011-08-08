@@ -649,7 +649,9 @@ The B<capability> method returns an array of capabilities as returned
 by the CAPABILITY IMAP Client command, or a reference to an array of
 capabilities if called in scalar context.  If the CAPABILITY IMAP
 Client command fails for any reason then the B<capability> method will
-return C<undef>.
+return C<undef>.  Supported capabilities are cached by the client,
+however, this cache is deleted after a connection is set to
+I<Authenticated> and when L</starttls> is called
 
 =head2 close
 
