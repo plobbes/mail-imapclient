@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.28';
+our $VERSION = '3.29_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -256,7 +256,6 @@ sub new {
         LastError             => "",
         Uid                   => 1,
         Count                 => 0,
-        Fast_io               => 1,
         Clear                 => 2,
         Keepalive             => 0,
         Maxappendstringlength => 1024**2,
@@ -274,6 +273,12 @@ sub new {
         $self->{$k} = $v if defined $v;
     }
     bless $self, ref($class) || $class;
+
+    # Fast_io is enabled by default when not given a socket
+    unless ( exists $self->{Fast_io} || $self->{Socket} || $self->{Rawsocket} )
+    {
+        $self->{Fast_io} = 1;
+    }
 
     if ( my $sup = $self->{Supportedflags} ) {    # unpack into case-less HASH
         my %sup = map { m/^\\?(\S+)/ ? lc $1 : () } @$sup;

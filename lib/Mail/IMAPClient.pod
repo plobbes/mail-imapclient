@@ -2914,20 +2914,12 @@ Example:
   # or:
   $imap->Fast_io($true_or_false);
 
-The I<Fast_io> parameter controls whether or not your
-Mail::IMAPClient object will attempt to use buffered (i.e. "Fast")
-I/O.  It is turned on by default.  If you turn it off you will
-definitely slow down your program, often to a painful degree.
-However, if you are experience problems you may want to try this just
-to see if it helps.  If it does then that means you have found a bug
-and should report it immediately (by following the instructions in the
-section on L</"REPORTING BUGS">).  Even if it doesn't fix the problem,
-testing with both I<Fast_io> turned on and with it turned off will
-often aid in identifying the source of the problem.  (If it doesn't
-help you, it may help me when you report it!)
+The I<Fast_io> parameter controls whether or not the Mail::IMAPClient
+object will attempt to use non-blocking I/O on the IMAP socket.  It is
+turned on by default (unless the caller provides the socket to be
+used).
 
-Lately there have not been any bugs associated with I<Fast_io> so this
-parameter may become deprecated in the future.
+See also L</Buffer>.
 
 =head2 Folder
 
