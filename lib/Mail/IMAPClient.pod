@@ -1144,9 +1144,12 @@ For example:
   # Prints:
   # Projects/Completed, Projects/Ongoing
 
-Notice that if you just want to list a folder's subfolders (and not
-the folder itself), then you need to include the hierarchy separator
-character (as returned by the L</separator> method).
+Please note that documentation previously suggested that if you just
+want to list a folder's subfolders (and not the folder itself), then
+you need to include the hierarchy separator character (as returned by
+the L</separator> method). However, this does not match the behavior
+of the existing implementation, so you will need to manually exclude
+the parent folder from the results.
 
 =head2 xlist_folders
 

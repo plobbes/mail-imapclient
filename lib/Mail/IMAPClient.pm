@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.29_02';
+our $VERSION = '3.29_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -562,7 +562,7 @@ sub _folders_or_subscribed {
         {
             my @list;
             if ($what) {
-                my $sep = $self->separator($what);
+                my $sep = $self->separator($what) || $self->separator(undef);
                 last unless defined $sep;
 
                 my $whatsub = $what =~ m/\Q${sep}\E$/ ? "$what*" : "$what$sep*";
@@ -571,8 +571,10 @@ sub _folders_or_subscribed {
                 shift @$tref;    # remove command
                 push @list, @$tref;
 
-                my $exists = $self->exists($what) or last;
-                if ($exists) {
+                # BUG?: this behavior has been around since 2.x, why?
+                my $cansel = $self->selectable($what);
+                last unless defined $cansel;
+                if ($cansel) {
                     $tref = $self->$method( undef, $what ) or last;
                     shift @$tref;    # remove command
                     push @list, @$tref;
@@ -2715,8 +2717,8 @@ sub is_parent {
 
 sub selectable {
     my ( $self, $f ) = @_;
-    my $info = $self->list( "", $f );
-    defined $info ? not( grep /NoSelect/i, @$info ) : undef;
+    my $info = $self->list( "", $f ) or return undef;
+    return not( grep /\b\\Noselect\b/i, @$info );
 }
 
 # append( $self, $folder, $text [, $optmsg] )
@@ -3258,14 +3260,14 @@ sub unseen_count {
 sub State($) {
     my ( $self, $state ) = @_;
 
-    if ($state) {
+    if ( defined $state ) {
         $self->{State} = $state;
 
         # discard cached capability info after authentication
         delete $self->{CAPABILITY} if ( $state == Authenticated );
     }
 
-    return $self->{State} || Unconnected;
+    return defined( $self->{State} ) ? $self->{State} : Unconnected;
 }
 
 sub Status          { shift->State }
