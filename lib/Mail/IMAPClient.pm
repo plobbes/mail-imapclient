@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.29';
+our $VERSION = '3.30_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2999,6 +2999,7 @@ sub authenticate {
                     : ( "", $client->User ),
                     defined $client->Password ? $client->Password : "",
                 ),
+                ''
             );
         };
     }
