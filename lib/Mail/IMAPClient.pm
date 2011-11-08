@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.30_02';
+our $VERSION = '3.30_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -16,7 +16,7 @@ use IO::Select ();
 use Carp qw(carp);    #local $SIG{__WARN__} = \&Carp::cluck; #DEBUG
 
 use Fcntl qw(F_GETFL F_SETFL O_NONBLOCK);
-use Errno qw(EAGAIN EPIPE ECONNRESET);
+use Errno qw(EAGAIN EBADF ECONNRESET EPIPE);
 use List::Util qw(first min max sum);
 use MIME::Base64 qw(encode_base64 decode_base64);
 use File::Spec ();
@@ -1478,7 +1478,8 @@ sub _send_bytes($) {
 
         # Unconnected might be apropos for more than just these?
         my $emsg = $! ? "$!" : "no error caught";
-        $self->State(Unconnected) if ( $! == EPIPE or $! == ECONNRESET );
+        $self->State(Unconnected)
+          if ( $! == EPIPE or $! == ECONNRESET or $! == EBADF );
         $self->LastError("Write failed '$emsg'");
 
         return undef;    # no luck
