@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.30_01';
+our $VERSION = '3.30_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -47,6 +47,7 @@ my %SEARCH_KEYS = map { ( $_ => 1 ) } qw(
 
 # modules require(d) during runtime when applicable
 my %Load_Module = (
+    "Compress-Zlib" => "Compress::Zlib",
     "SSL"           => "IO::Socket::SSL",
     "BodyStructure" => "Mail::IMAPClient::BodyStructure",
     "Envelope"      => "Mail::IMAPClient::BodyStructure::Envelope",
@@ -83,11 +84,11 @@ BEGIN {
 
     # set-up accessors
     foreach my $datum (
-        qw(Authcallback Authmechanism Authuser Buffer Count Debug
-        Debug_fh Domain Folder Ignoresizeerrors Keepalive
+        qw(Authcallback Authmechanism Authuser Buffer Count Compress
+        Debug Debug_fh Domain Folder Ignoresizeerrors Keepalive
         Maxappendstringlength Maxcommandlength Maxtemperrors
         Password Peek Port Prewritemethod Proxy Ranges Readmethod
-        Reconnectretry Server Showcredentials Ssl Starttls
+        Readmoremethod Reconnectretry Server Showcredentials Ssl Starttls
         Supportedflags Timeout Uid User)
       )
     {
@@ -304,7 +305,10 @@ sub new {
         $self->RawSocket($sock) unless $self->{Socket};
     }
 
-    !$self->{Socket} && $self->{Server} ? $self->connect : $self;
+    if ( !$self->{Socket} && $self->{Server} ) {
+        $self->connect or return undef;
+    }
+    return $self;
 }
 
 sub connect(@) {
@@ -362,7 +366,7 @@ sub RawSocket(;$) {
     delete $self->{_fcntl};
     $self->Fast_io( $self->Fast_io );
 
-    $sock;
+    return $sock;
 }
 
 sub Socket($) {
@@ -392,7 +396,11 @@ sub Socket($) {
         $self->starttls or return undef;
     }
 
-    $self->User && $self->Password ? $self->login : $self;
+    if ( defined $self->User && defined $self->Password ) {
+        $self->login or return undef;
+    }
+
+    return $self->{Socket};
 }
 
 # RFC2595 section 3.1
@@ -437,29 +445,128 @@ sub starttls {
     return $self;
 }
 
+# RFC4978 COMPRESS
+sub compress {
+    my ($self) = @_;
+
+    # BUG? strict check on capability commented out for now...
+    #my $can = $self->has_capability("COMPRESS")
+    #return undef unless $can and $can eq "DEFLATE";
+
+    $self->_imap_command("COMPRESS DEFLATE") or return undef;
+
+    my $zcl = $self->_load_module("Compress-Zlib") or return undef;
+
+    # give caller control of args if desired
+    $self->Compress(
+        [
+            -WindowBits => -$zcl->MAX_WBITS(),
+            -Level      => $zcl->Z_BEST_SPEED()
+        ]
+    ) unless ( $self->Compress and ref( $self->Compress ) eq "ARRAY" );
+
+    my ( $rc, $do, $io );
+
+    ( $do, $rc ) = Compress::Zlib::deflateInit( @{ $self->Compress } );
+    unless ( $rc == $zcl->Z_OK ) {
+        $self->LastError("deflateInit failed (rc=$rc)");
+        return undef;
+    }
+
+    ( $io, $rc ) =
+      Compress::Zlib::inflateInit( -WindowBits => -$zcl->MAX_WBITS() );
+    unless ( $rc == $zcl->Z_OK ) {
+        $self->LastError("inflateInit failed (rc=$rc)");
+        return undef;
+    }
+
+    $self->{Prewritemethod} = sub {
+        my ( $imap, $string ) = @_;
+
+        my ( $rc, $out1, $out2 );
+        ( $out1, $rc ) = $do->deflate($string);
+        ( $out2, $rc ) = $do->flush( $zcl->Z_PARTIAL_FLUSH() )
+          unless ( $rc != $zcl->Z_OK );
+
+        unless ( $rc == $zcl->Z_OK ) {
+            $self->LastError("deflate/flush failed (rc=$rc)");
+            return undef;
+        }
+
+        return $out1 . $out2;
+    };
+
+    # need to retain some state for Readmoremethod/Readmethod calls
+    my ( $Zbuf, $Ibuf ) = ( "", "" );
+
+    $self->{Readmoremethod} = sub {
+        my $self = shift;
+        return 1 if ( length($Zbuf) || length($Ibuf) );
+        $self->__read_more(@_);
+    };
+
+    $self->{Readmethod} = sub {
+        my ( $imap, $fh, $buf, $len, $off ) = @_;
+
+        # get more data, but empty $Ibuf first if any data is left
+        my ( $lz, $li ) = ( length $Zbuf, length $Ibuf );
+        if ( $lz || !$li ) {
+            my $ret = sysread( $fh, $Zbuf, $len, length $Zbuf );
+            $lz = length $Zbuf;
+            return $ret if ( !$ret && !$lz );    # $ret is undef or 0
+        }
+
+        # accummulate inflated data in $Ibuf
+        if ($lz) {
+            my ( $tbuf, $rc ) = $io->inflate( \$Zbuf );
+            unless ( $rc == $zcl->Z_OK ) {
+                $self->LastError("inflate failed (rc=$rc)");
+                return undef;
+            }
+            $Ibuf .= $tbuf;
+        }
+
+        # pull desired length of data from $Ibuf
+        my $tbuf = substr( $Ibuf, 0, $len );
+        substr( $Ibuf, 0, $len ) = "";
+        substr( $$buf, $off ) = $tbuf;
+
+        return length $tbuf;
+    };
+
+    return $self;
+}
+
 sub login {
     my $self = shift;
     my $auth = $self->Authmechanism;
-    return $self->authenticate( $auth, $self->Authcallback )
-      if $auth && $auth ne 'LOGIN';
 
-    my $passwd = $self->Password;
-    my $id     = $self->User;
+    if ( $auth && $auth ne 'LOGIN' ) {
+        $self->authenticate( $auth, $self->Authcallback )
+          or return undef;
+    }
+    else {
+        my $passwd = $self->Password;
+        my $id     = $self->User;
 
-    return undef unless ( defined($passwd) and defined($id) );
+        return undef unless ( defined($passwd) and defined($id) );
 
-    # BUG: should use Quote() with $passwd and $id
-    if ( $passwd eq "" or $passwd =~ m/\W/ ) {
-        $passwd =~ s/(["\\])/\\$1/g;
-        $passwd = qq("$passwd");
+        # BUG: should use Quote() with $passwd and $id
+        if ( $passwd eq "" or $passwd =~ m/\W/ ) {
+            $passwd =~ s/(["\\])/\\$1/g;
+            $passwd = qq("$passwd");
+        }
+
+        $id = qq("$id") if $id !~ /^".*"$/;
+
+        $self->_imap_command("LOGIN $id $passwd")
+          or return undef;
     }
 
-    $id = qq("$id") if $id !~ /^".*"$/;
-
-    $self->_imap_command("LOGIN $id $passwd")
-      or return undef;
-
     $self->State(Authenticated);
+    if ( $self->Compress ) {
+        $self->compress or return undef;
+    }
     return $self;
 }
 
@@ -1347,10 +1454,10 @@ sub _send_bytes($) {
 
     local $SIG{PIPE} = 'IGNORE';    # handle SIGPIPE as normal error
 
+    my $socket = $self->Socket;
     while ( $total < length $$byteref ) {
         my $written =
-          syswrite( $self->Socket, $$byteref, length($$byteref) - $total,
-            $total );
+          syswrite( $socket, $$byteref, length($$byteref) - $total, $total );
 
         if ( defined $written ) {
             $temperrs = 0;
@@ -1627,6 +1734,12 @@ sub _sysread {
 }
 
 sub _read_more {
+    my $self = shift;
+    my $rm   = $self->Readmoremethod;
+    $rm ? $rm->( $self, @_ ) : $self->__read_more(@_);
+}
+
+sub __read_more {
     my $self = shift;
     my $opt = ref( $_[0] ) eq "HASH" ? shift : {};
     my ( $socket, $timeout ) = @_;
