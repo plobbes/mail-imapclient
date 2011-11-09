@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.30_03';
+our $VERSION = '3.30_04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -332,27 +332,28 @@ sub connect(@) {
     }
     else {
         my $ioclass = "IO::Socket::INET";
-        if ( $self->Ssl ) {
-            $ioclass = $self->_load_module("SSL") or return undef;
-        }
+        $ioclass = $self->_load_module("SSL") if ( $self->Ssl );
 
-        $self->_debug("Connecting via $ioclass to $server:$port @timeout");
-        $sock = $ioclass->new(
-            PeerAddr => $server,
-            PeerPort => $port,
-            Proto    => 'tcp',
-            Debug    => $self->Debug,
-            @timeout
-        );
+        if ($ioclass) {
+            $self->_debug("Connecting via $ioclass to $server:$port @timeout");
+            $sock = $ioclass->new(
+                PeerAddr => $server,
+                PeerPort => $port,
+                Proto    => 'tcp',
+                Debug    => $self->Debug,
+                @timeout
+            );
+        }
     }
 
-    unless ($sock) {
+    if ($sock) {
+        $self->_debug( "Connected to $server" . ( $! ? " errno($!)" : "" ) );
+        return $self->Socket($sock);
+    }
+    else {
         $self->LastError("Unable to connect to $server: $@");
         return undef;
     }
-
-    $self->_debug( "Connected to $server" . ( $! ? " errno($!)" : "" ) );
-    $self->Socket($sock);
 }
 
 sub RawSocket(;$) {
@@ -1165,16 +1166,32 @@ sub reconnect {
 
     if ( $self->IsAuthenticated ) {
         $self->_debug("reconnect called but already authenticated");
-        return $self;
+        return 1;
+    }
+
+    # safeguard from deep recursion via connect
+    if ( $self->{_doing_reconnect} ) {
+        $self->_debug("recursive call to reconnect, returning 0\n");
+        $self->LastError("unexpected reconnect recursion")
+          unless $self->LastError;
+        return 0;
     }
 
     my $einfo = $self->LastError || "";
     $self->_debug( "reconnecting to ", $self->Server, ", last error: $einfo" );
+    $self->{_doing_reconnect} = 1;
 
     # reconnect and select appropriate folder
-    $self->connect or return undef;
+    my $ret;
+    if ( $self->connect ) {
+        $ret = 1;
+        if ( defined $self->Folder ) {
+            $ret = defined( $self->select( $self->Folder ) ) ? 1 : undef;
+        }
+    }
 
-    return ( defined $self->Folder ) ? $self->select( $self->Folder ) : $self;
+    delete $self->{_doing_reconnect};
+    return $ret ? 1 : $ret;
 }
 
 # wrapper for _imap_command_do to enable retrying on lost connections
@@ -1205,11 +1222,15 @@ sub _imap_command {
                 # BUG? reconnect if caller ignored/missed earlier errors?
                 # or $self->LastError =~ /NO not connected/
               );
-            if ( $self->reconnect ) {
-                $self->_debug("reconnect successful on try #$tries");
+            my $ret = $self->reconnect;
+            if ($ret) {
+                $self->_debug("reconnect success($ret) on try #$tries/$retry");
+            }
+            elsif ( defined $ret and $ret == 0 ) {    # escaping recursion
+                return undef;
             }
             else {
-                $self->_debug("reconnect failed on try #$tries");
+                $self->_debug("reconnect failure on try #$tries/$retry");
                 push( @err, $self->LastError ) if $self->LastError;
             }
         }
