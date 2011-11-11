@@ -8,7 +8,7 @@ Changes from 0.09    to 2.99_01 made by David Kernen
 version 3.30: Fri Nov 11 09:37:00 EST 2011
 	- rt.cpan.org#72347: Starttls array ref argument dereferenced twice
 	  [Jonathan Buhacoff]
-	- Port now defaults to 993 if $self->Ssl otherwise 143
+	- during connect(): Port now defaults 143 or 993 if $self->Ssl
 	  [Kodi Arfer]
 	- stop reconnect deep recursion if server disconnects on login
 	  [Luca Ferrario]

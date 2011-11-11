@@ -3085,10 +3085,11 @@ Example:
   # or:
   $imap->Port($new_value);
 
-Specifies the port on which the IMAP server is listening.  The default
-is 993 if Ssl L</Ssl> is true otherwise the default is 143, which is
-the standard IMAP port.  Can be supplied with the L</new> method call
-or separately by calling the L</Port> object method.
+Specifies the port on which the IMAP server is listening.  A default
+value of 993 (if L</Ssl> is true) or 143 is set during a call to
+L</connect> if no value is provided by the caller.  This argument can
+be supplied with the L</new> method call or separately by calling the
+L</Port> object method.
 
 =head2 Prewritemethod
 
