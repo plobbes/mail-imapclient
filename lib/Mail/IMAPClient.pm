@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.30_04';
+our $VERSION = '3.30';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -264,7 +264,6 @@ sub new {
         Maxtemperrors         => undef,
         State                 => Unconnected,
         Authmechanism         => 'LOGIN',
-        Port                  => 143,
         Timeout               => 600,
         History               => {},
     };
@@ -318,7 +317,7 @@ sub connect(@) {
     %$self = ( %$self, @_ ) if @_;
 
     my $server  = $self->Server;
-    my $port    = $self->Port;
+    my $port    = $self->Port || $self->Port( $self->Ssl ? "993" : "143" );
     my @timeout = $self->Timeout ? ( Timeout => $self->Timeout ) : ();
     my $sock;
 
@@ -432,7 +431,7 @@ sub starttls {
     # give caller control of args to start_SSL if desired
     my @sslargs =
         ( $self->Starttls and ref( $self->Starttls ) eq "ARRAY" )
-      ? ( @${ $self->Starttls } )
+      ? ( @{ $self->Starttls } )
       : ( Timeout => 30 );
 
     unless ( $ioclass->start_SSL( $sock, @sslargs ) ) {
