@@ -9,94 +9,98 @@ my $HEAD = "HEAD";
 
 # my has file scope, not limited to package!
 my $parser = Mail::IMAPClient::BodyStructure::Parse->new
-   or die "Cannot parse rules: $@\n"
-        . "Try remaking Mail::IMAPClient::BodyStructure::Parse.\n";
+  or die "Cannot parse rules: $@\n"
+  . "Try remaking Mail::IMAPClient::BodyStructure::Parse.\n";
 
-sub new
-{   my $class = shift;
+sub new {
+    my $class         = shift;
     my $bodystructure = shift;
 
-    my $self  = $parser->start($bodystructure)
-       or return undef;
+    my $self = $parser->start($bodystructure)
+      or return undef;
 
     $self->{_prefix} = "";
     $self->{_id}     = exists $self->{bodystructure} ? $HEAD : 1;
     $self->{_top}    = 1;
 
-    bless $self, ref($class)||$class;
+    bless $self, ref($class) || $class;
 }
 
-sub _get_thingy
-{   my $thingy = shift;
-    my $object = shift || (ref $thingy ? $thingy : undef);
+sub _get_thingy {
+    my $thingy = shift;
+    my $object = shift || ( ref $thingy ? $thingy : undef );
 
-    unless ($object && ref $object)
-    {   warn $@ = "No argument passed to $thingy method.";
+    unless ( $object && ref $object ) {
+        warn $@ = "No argument passed to $thingy method.";
         return undef;
     }
 
-    unless(UNIVERSAL::isa($object, 'HASH') && exists $object->{$thingy})
-    {   my $a = $thingy =~ /^[aeiou]/i ? 'an' : 'a';
-        my $has = ref $object eq 'HASH' ? join(", ",keys %$object) : '';
-        warn $@ = ref($object)." $object does not have $a $thingy. "
-                . ($has ? "It has $has" : '');
+    unless ( UNIVERSAL::isa( $object, 'HASH' ) && exists $object->{$thingy} ) {
+        my $a = $thingy =~ /^[aeiou]/i ? 'an' : 'a';
+        my $has = ref $object eq 'HASH' ? join( ", ", keys %$object ) : '';
+        warn $@ =
+            ref($object)
+          . " $object does not have $a $thingy. "
+          . ( $has ? "It has $has" : '' );
         return undef;
     }
 
     my $value = $object->{$thingy};
-    $value    =~ s/\\ ( [\\\(\)"\x0d\x0a] )/$1/gx;
-    $value    =~ s/^"(.*)"$/$1/;
+    $value =~ s/\\ ( [\\\(\)"\x0d\x0a] )/$1/gx;
+    $value =~ s/^"(.*)"$/$1/;
     $value;
 }
 
-BEGIN
-{   no strict 'refs';
+BEGIN {
+    no strict 'refs';
     foreach my $datum (
-       qw/ bodytype bodysubtype bodyparms bodydisp bodyid bodydesc bodyenc
-        bodysize bodylang envelopestruct textlines / )
-    {   *$datum = sub { _get_thingy($datum, @_) };
+        qw/ bodytype bodysubtype bodyparms bodydisp bodyid bodydesc bodyenc
+        bodysize bodylang envelopestruct textlines /
+      )
+    {
+        *$datum = sub { _get_thingy( $datum, @_ ) };
     }
 }
 
-sub parts
-{   my $self = shift;
-    return wantarray ? @{$self->{PartsList}} : $self->{PartsList}
-        if exists $self->{PartsList};
+sub parts {
+    my $self = shift;
+    return wantarray ? @{ $self->{PartsList} } : $self->{PartsList}
+      if exists $self->{PartsList};
 
     my @parts;
     $self->{PartsList} = \@parts;
 
     # BUG?: should this default to ($HEAD, TEXT)
-    unless(exists $self->{bodystructure})
-    {   $self->{PartsIndex}{1} = $self;
-        @parts = ($HEAD, 1);
+    unless ( exists $self->{bodystructure} ) {
+        $self->{PartsIndex}{1} = $self;
+        @parts = ( $HEAD, 1 );
         return wantarray ? @parts : \@parts;
     }
 
-    foreach my $p ($self->bodystructure)
-    {   my $id = $p->id;
+    foreach my $p ( $self->bodystructure ) {
+        my $id = $p->id;
         push @parts, $id;
-        $self->{PartsIndex}{$id} = $p ;
+        $self->{PartsIndex}{$id} = $p;
         my $type = uc $p->bodytype || '';
 
         push @parts, "$id.$HEAD"
-            if $type eq 'MESSAGE';
+          if $type eq 'MESSAGE';
     }
 
     wantarray ? @parts : \@parts;
 }
 
-sub bodystructure
-{   my $self   = shift;
+sub bodystructure {
+    my $self   = shift;
     my $partno = 0;
     my @parts;
 
-    if($self->{_top})
-    {   $self->{_id}     ||= $HEAD;
+    if ( $self->{_top} ) {
+        $self->{_id}     ||= $HEAD;
         $self->{_prefix} ||= $HEAD;
         $partno = 0;
-        foreach my $b ( @{$self->{bodystructure}} )
-        {   $b->{_id}     = ++$partno;
+        foreach my $b ( @{ $self->{bodystructure} } ) {
+            $b->{_id}     = ++$partno;
             $b->{_prefix} = $partno;
             push @parts, $b, $b->bodystructure;
         }
@@ -104,10 +108,10 @@ sub bodystructure
     }
 
     my $prefix = $self->{_prefix} || "";
-    $prefix    =~ s/\.?$/./;
+    $prefix =~ s/\.?$/./;
 
-    foreach my $p ( @{$self->{bodystructure}} )
-    {   $partno++;
+    foreach my $p ( @{ $self->{bodystructure} } ) {
+        $partno++;
 
         # BUG?: old code didn't add .TEXT sections, should we skip these?
         # - This code needs to be generalised (maybe it belongs in parts()?)
@@ -119,14 +123,14 @@ sub bodystructure
         my $ptype = $p->{bodytype} || "";
 
         # a message and the multipart inside of it "collapse together"
-        if ($partno == 1 and $stype eq 'MESSAGE' and $ptype eq 'MULTIPART') {
+        if ( $partno == 1 and $stype eq 'MESSAGE' and $ptype eq 'MULTIPART' ) {
             $pno = "TEXT";
             $p->{_prefix} = "$prefix";
         }
         else {
             $p->{_prefix} = "$prefix$partno";
         }
-        $p->{_id}   ||= "$prefix$pno";
+        $p->{_id} ||= "$prefix$pno";
 
         push @parts, $p, $p->{bodystructure} ? $p->bodystructure : ();
     }
@@ -134,22 +138,22 @@ sub bodystructure
     wantarray ? @parts : \@parts;
 }
 
-sub id
-{   my $self = shift;
+sub id {
+    my $self = shift;
     return $self->{_id}
-        if exists $self->{_id};
+      if exists $self->{_id};
 
     return $HEAD
-        if $self->{_top};
+      if $self->{_top};
 
     # BUG?: can this be removed? ... seems wrong
-    if ($self->{bodytype} eq 'MULTIPART')
-    {   my $p = $self->{_id} || $self->{_prefix};
+    if ( $self->{bodytype} eq 'MULTIPART' ) {
+        my $p = $self->{_id} || $self->{_prefix};
         $p =~ s/\.$//;
         return $p;
     }
-    else
-    {   return $self->{_id}  ||= 1;
+    else {
+        return $self->{_id} ||= 1;
     }
 }
 
@@ -159,55 +163,57 @@ our @ISA = qw/Mail::IMAPClient::BodyStructure/;
 package Mail::IMAPClient::BodyStructure::Envelope;
 our @ISA = qw/Mail::IMAPClient::BodyStructure/;
 
-sub new
-{   my ($class, $envelope) = @_;
+sub new {
+    my ( $class, $envelope ) = @_;
     $parser->envelope($envelope);
 }
 
-sub parse_string
-{   my ($class, $envelope) = @_;
+sub parse_string {
+    my ( $class, $envelope ) = @_;
     $envelope = "(" . $envelope . ")" unless ( $envelope =~ /^\(/ );
     $parser->envelopestruct($envelope);
 }
 
-sub from_addresses    { shift->_addresses(from    => 1) }
-sub sender_addresses  { shift->_addresses(sender  => 1) }
-sub replyto_addresses { shift->_addresses(replyto => 1) }
-sub to_addresses      { shift->_addresses(to      => 0) }
-sub cc_addresses      { shift->_addresses(cc      => 0) }
-sub bcc_addresses     { shift->_addresses(bcc     => 0) }
+sub from_addresses    { shift->_addresses( from    => 1 ) }
+sub sender_addresses  { shift->_addresses( sender  => 1 ) }
+sub replyto_addresses { shift->_addresses( replyto => 1 ) }
+sub to_addresses      { shift->_addresses( to      => 0 ) }
+sub cc_addresses      { shift->_addresses( cc      => 0 ) }
+sub bcc_addresses     { shift->_addresses( bcc     => 0 ) }
 
-sub _addresses($$$)
-{   my ($self, $name, $isSender) = @_;
+sub _addresses($$$) {
+    my ( $self, $name, $isSender ) = @_;
     ref $self->{$name} eq 'ARRAY'
-        or return ();
+      or return ();
 
     my @list;
-    foreach ( @{$self->{$name}} )
-    {   my $pn   = $_->personalname;
+    foreach ( @{ $self->{$name} } ) {
+        my $pn = $_->personalname;
         my $name = $pn && $pn ne 'NIL' ? "$pn " : '';
         push @list, $name . '<' . $_->mailboxname . '@' . $_->hostname . '>';
     }
 
-      wantarray ? @list
-    : $isSender ? $list[0]
-    :             \@list;
+    wantarray     ? @list
+      : $isSender ? $list[0]
+      :             \@list;
 }
 
-BEGIN
-{   no strict 'refs';
-    for my $datum ( qw(subject inreplyto from messageid bcc date
-                       replyto to sender cc))
-    {  *$datum = sub { @_ > 1 ? $_[0]->{$datum} = $_[1] : $_[0]->{$datum} }
+BEGIN {
+    no strict 'refs';
+    for my $datum (
+        qw(subject inreplyto from messageid bcc date
+        replyto to sender cc)
+      )
+    {
+        *$datum = sub { @_ > 1 ? $_[0]->{$datum} = $_[1] : $_[0]->{$datum} }
     }
 }
-
 
 package Mail::IMAPClient::BodyStructure::Address;
 our @ISA = qw/Mail::IMAPClient::BodyStructure/;
 
-for my $datum ( qw(personalname mailboxname hostname sourcename) )
-{   no strict 'refs';
+for my $datum (qw(personalname mailboxname hostname sourcename)) {
+    no strict 'refs';
     *$datum = sub { shift->{$datum}; };
 }
 
