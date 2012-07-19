@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.32_01';
+our $VERSION = '3.32_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -546,20 +546,15 @@ sub login {
           or return undef;
     }
     else {
+        my $user   = $self->User;
         my $passwd = $self->Password;
-        my $id     = $self->User;
 
-        return undef unless ( defined($passwd) and defined($id) );
+        return undef unless ( defined($passwd) and defined($user) );
 
-        # BUG: should use Quote() with $passwd and $id
-        if ( $passwd eq "" or $passwd =~ m/\W/ ) {
-            $passwd =~ s/(["\\])/\\$1/g;
-            $passwd = qq("$passwd");
-        }
+        $user   = ( $user   eq "" ) ? qq("") : $self->Quote($user);
+        $passwd = ( $passwd eq "" ) ? qq("") : $self->Quote($passwd);
 
-        $id = qq("$id") if $id !~ /^".*"$/;
-
-        $self->_imap_command("LOGIN $id $passwd")
+        $self->_imap_command("LOGIN $user $passwd")
           or return undef;
     }
 
@@ -577,6 +572,7 @@ sub noop {
 
 sub proxyauth {
     my ( $self, $user ) = @_;
+    $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
     $self->_imap_command("PROXYAUTH $user") ? $self->Results : undef;
 }
 
@@ -741,33 +737,27 @@ sub subscribed {
     return wantarray ? @folders : \@folders;
 }
 
-# BUG? cleanup escaping/quoting
 sub deleteacl {
     my ( $self, $target, $user ) = @_;
     $target = $self->Massage($target);
-    $user =~ s/^"(.*)"$/$1/;
-    $user =~ s/"/\\"/g;
+    $user   = ( $user eq "" ) ? qq("") : $self->Quote($user);
 
-    $self->_imap_command(qq(DELETEACL $target "$user"))
+    $self->_imap_command(qq(DELETEACL $target $user))
       or return undef;
 
     return wantarray ? $self->History : $self->Results;
 }
 
-# BUG? cleanup escaping/quoting
 sub setacl {
     my ( $self, $target, $user, $acl ) = @_;
     $target ||= $self->Folder;
     $target = $self->Massage($target);
 
     $user ||= $self->User;
-    $user =~ s/^"(.*)"$/$1/;
-    $user =~ s/"/\\"/g;
+    $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
+    $acl  = ( $acl  eq "" ) ? qq("") : $self->Quote($acl);
 
-    $acl =~ s/^"(.*)"$/$1/;
-    $acl =~ s/"/\\"/g;
-
-    $self->_imap_command(qq(SETACL $target "$user" "$acl"))
+    $self->_imap_command(qq(SETACL $target $user $acl))
       or return undef;
 
     return wantarray ? $self->History : $self->Results;
@@ -809,10 +799,9 @@ sub listrights {
     $target = $self->Massage($target);
 
     $user ||= $self->User;
-    $user =~ s/^"(.*)"$/$1/;
-    $user =~ s/"/\\"/g;
+    $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
 
-    $self->_imap_command(qq(LISTRIGHTS $target "$user"))
+    $self->_imap_command(qq(LISTRIGHTS $target $user))
       or return undef;
 
     my $resp = first { /^\* LISTRIGHTS/ } $self->History;
@@ -2352,21 +2341,13 @@ sub uidexpunge {
     return wantarray ? $self->History : $self->Results;
 }
 
-# BUG? cleanup escaping/quoting
 sub rename {
     my ( $self, $from, $to ) = @_;
 
-    if ( $from =~ /^"(.*)"$/ ) {
-        $from = $1 unless $self->exists($from);
-        $from =~ s/"/\\"/g;
-    }
+    $from = ( $from eq "" ) ? qq("") : $self->Massage($from);
+    $to   = ( $to   eq "" ) ? qq("") : $self->Massage($to);
 
-    if ( $to =~ /^"(.*)"$/ ) {
-        $to = $1 unless $self->exists($from) && $from =~ /^".*"$/;
-        $to =~ s/"/\\"/g;
-    }
-
-    $self->_imap_command(qq(RENAME "$from" "$to")) ? $self : undef;
+    $self->_imap_command(qq(RENAME $from $to)) ? $self : undef;
 }
 
 sub status {
@@ -3395,15 +3376,16 @@ sub Quote($) { $_[0]->Massage( $_[1], NonFolderArg ) }
 #   resp-specials   = "]"
 # rfc2060:
 #   CTL ::= <any ASCII control character and DEL, 0x00 - 0x1f, 0x7f>
-# Additionally, we encode strings with } and [, be less than minimal
+# Paranoia/safety:
+#   encode strings with "}" / "[" / "]" / non-ascii chars
 sub Massage($;$) {
     my ( $self, $name, $notFolder ) = @_;
-    $name =~ s/^\"(.*)\"$/$1/ unless $notFolder;
+    $name =~ s/^\"(.*)\"$/$1/s unless $notFolder;
 
-    if ( $name =~ /["\\]/ ) {
+    if ( $name =~ /["\\[:^ascii:][:cntrl:]]/s ) {
         return "{" . length($name) . "}" . $CRLF . $name;
     }
-    elsif ( $name =~ /[(){}\s[:cntrl:]%*\[\]]/ ) {
+    elsif ( $name =~ /[(){}\s%*\[\]]/s ) {
         return qq("$name");
     }
     else {

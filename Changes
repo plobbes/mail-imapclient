@@ -5,9 +5,18 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.32_01: Mon, May 07, 2012 10:47:03 PM
+version 3.32_02: Thu, Jul 19, 2012  1:39:17 PM
+	- Quote()/Massage() now uses literals for non ascii data
+          [Mathias Reitinger] reported issues with utf8 data in password
+	- use Quote()/Massage() consistently now in:
+	    login() proxyauth() deleteacl() setacl() listrights() rename()
+	- documented deleteacl() and other minor pod cleanup
 	- ran Mail::IMAPClient::BodyStructure through perltidy
 	- update year in README/pod to 2012
+	- rt.cpan.org#74733: Fails with Parse::RecDescent >= 1.966_002
+          rt.cpan.org#74593: Recent changes break Module::ExtractUse and ...
+	  [ANDK, TEAM, SREZIC, NBEBOUT at CPAN and nine from detonation]
+	  - Makefile.PL avoid buggy Parse::RecDescent 1.966_002 until 1.967_009
 	- rt.cpan.org#76989: Mail::IMAPClient::BodyStructure usage/docs
 	  [Pierluigi Frullani]
 	  - fix incorrect documentation on new()

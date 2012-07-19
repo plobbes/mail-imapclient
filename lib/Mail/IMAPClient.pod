@@ -1,11 +1,11 @@
-=head1 NAME 
+=head1 NAME
 
 Mail::IMAPClient - An IMAP Client API
 
 =head1 SYNOPSIS
 
   use Mail::IMAPClient;
-  
+
   my $imap = Mail::IMAPClient->new(
     Server   => 'localhost',
     User     => 'username',
@@ -230,7 +230,7 @@ Example:
 The B<Quote> method accepts a value as an argument and returns its
 argument as a correctly quoted string or a literal string.  Since
 version 3.17 Mail::IMAPClient automatically quotes search arguments we
-use a SCALARREF so search will not modify or re-quite the valaue
+use a SCALARREF so search will not modify or re-quote the value
 returned by B<Quote>.
 
 Note this method should not be used on folder names for
@@ -783,6 +783,18 @@ The B<delete> method accepts a single argument, the name of a folder
 to delete.  It returns a true value on success and C<undef> on
 failure.
 
+=head2 deleteacl
+
+Example:
+
+  $imap->deleteacl( $folder, $userid )
+    or die "Could not delete acl: $@\n";
+
+The B<deleteacl> method accepts two input arguments, a folder name, a
+user id (or authentication identifier, to use the terminology of
+RFC2086).  See RFC2086 for more information.  (This is somewhat
+experimental and its implementation may change.)
+
 =head2 delete_message
 
 Example:
@@ -795,7 +807,7 @@ The above could also be rewritten like this:
 
   # scalar context returns array ref
   my $msgs = scalar($imap->seen);
-  
+
   scalar(@$msgs) and $imap->delete_message($msgs)
     or die "Could not delete_message: $@\n";
 
@@ -1477,7 +1489,8 @@ and $@ is set.  The methods L</new>, L</connect>, and L</Socket> may
 automatically invoke B<login> see the documentation of each method for
 details.
 
-If the L</Compress> parameter is set, the L</compress> method will automatically be called after successful authentication.
+If the L</Compress> parameter is set, the L</compress> method will
+automatically be called after successful authentication.
 
 See also L</proxyauth> and L</Proxy> for additional information
 regarding ways of authenticating with a server via SASL and/or
@@ -2275,7 +2288,7 @@ contain both subfolders and mail messages; other servers allow this.)
 
 Example:
 
-  $imap->set_flag("Seen",@msgs)
+  $imap->set_flag( "Seen", @msgs )
     or die "Could not set flag: $@\n";
 
 The B<set_flag> method accepts the name of a flag as its first
@@ -2298,7 +2311,7 @@ which is why you don't have to worry about it overly much.)
 
 Example:
 
-  $imap->setacl($folder,$userid,$authstring)
+  $imap->setacl( $folder, $userid, $aclstring )
     or die "Could not set acl: $@\n";
 
 The B<setacl> method accepts three input arguments, a folder name, a
@@ -2429,7 +2442,7 @@ Version note: method added in Mail::IMAPClient 3.22
 
 Example:
 
-  my @rawdata = $imap->status($folder,qw/(Messages)/)
+  my @rawdata = $imap->status( $folder, qw/(Messages)/ )
     or die "Error obtaining status: $@\n";
 
 The B<status> method accepts one argument, the name of a folder (or
@@ -2646,7 +2659,7 @@ messages in the currently selected Folder.
 
 Example:
 
-  $imap->unset_flag("\Seen",@msgs)
+  $imap->unset_flag( "\Seen", @msgs )
     or die "Could not unset_flag: $@\n";
 
 The B<unset_flag> method accepts the name of a flag as its first
@@ -2723,9 +2736,9 @@ obtain the current value of the parameter as follows:
   my $imap = Mail::IMAPClient->new;
      $imap->parameter( "value");
      $imap->parameter2("value");
-  
+
     ...    # A whole bunch of awesome Perl code, omitted for brevity
-  
+
   my $forgot  = $imap->parameter;
   my $forgot2 = $imap->parameter2;
 
@@ -3740,7 +3753,7 @@ exchange.  After the L</authenticate> method sends "<tag> AUTHENTICATE
 challenge.  The L</authenticate> method then invokes the code whose
 reference is stored in the B<Authcallback> parameter as follows:
 
-  $Authcallback->($challenge, $imap)
+  $Authcallback->( $challenge, $imap )
 
 where C<$Authcallback> is the code reference stored in the
 B<Authcallback> parameter, C<$challenge> is the challenge received
