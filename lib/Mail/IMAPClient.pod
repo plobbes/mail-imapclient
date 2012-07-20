@@ -957,7 +957,7 @@ server will likely respond with an error like I<* BAD Invalid tag>.
 
 On failure <undef> is returned and L</LastError> is set.
 
-See also L</idle>, L</imap_data> and L</Results>.
+See also L</idle>, L</idle_data> and L</Results>.
 
 =head2 examine
 
@@ -1289,9 +1289,14 @@ has been terminated by calling L</done>.  Failure to do so will result
 in an error and the idle command will typically be terminated by the
 server.
 
-See also L</imap_data> and L</done>.
+See also L</idle_data> and L</done>.
 
 =head2 idle_data
+
+Usage:
+
+  # an optional timeout in seconds may be specified
+  $imap->idle_data( [$timeout] )
 
 Example:
 
@@ -1304,12 +1309,12 @@ Example:
 The B<idle_data> method can be used to accept any unsolicited mailbox
 update messages that have been sent by the server during an L</idle>
 command.  This method does not send any commands to the server, it
-simply waits for data from the server and returns that data to the
-caller.
+simply looks for and optionally waits for data from the server and
+returns that data to the caller.
 
-The B<idle> method accepts an optional $timeout argument and returns
-an array (or an array reference if called in scalar context) with the
-messages from the server.
+The B<idle_data> method accepts an optional $timeout argument and
+returns an array (or an array reference if called in scalar context)
+with the messages from the server.
 
 By default a timeout of 0 seconds is used (do not block).  Internally
 the timeout is passed to L<perlfunc/select>.  The timeout controls how
