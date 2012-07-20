@@ -52,7 +52,7 @@ do {
         }
     }
 };
-exit;
+
 WriteMakefile(
     NAME             => 'Mail::IMAPClient',
     AUTHOR           => 'Phil Pearl (Lobbes) <phil@zimbra.com>',
