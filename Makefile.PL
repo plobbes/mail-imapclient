@@ -46,13 +46,13 @@ do {
         my $found = version->parse( Parse::RecDescent->VERSION() );
         my $broke = version->parse("1.966002");
         my $fixed = version->parse("1.967009");
-        unless ( $found < $fixed and $found >= $broke ) {
+        if ( $found < $fixed and $found >= $broke ) {
             die("Found broken Parse::RecDescent $found in your environment.\n",
                 "Please upgrade to version $fixed or greater.\n");
         }
     }
 };
-
+exit;
 WriteMakefile(
     NAME             => 'Mail::IMAPClient',
     AUTHOR           => 'Phil Pearl (Lobbes) <phil@zimbra.com>',
