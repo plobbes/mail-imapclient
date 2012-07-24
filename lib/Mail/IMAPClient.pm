@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.32_02';
+our $VERSION = '3.32_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -740,7 +740,7 @@ sub subscribed {
 sub deleteacl {
     my ( $self, $target, $user ) = @_;
     $target = $self->Massage($target);
-    $user   = ( $user eq "" ) ? qq("") : $self->Quote($user);
+    $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
 
     $self->_imap_command(qq(DELETEACL $target $user))
       or return undef;
@@ -3333,37 +3333,38 @@ sub getquotaroot {
     return $self->_imap_command("GETQUOTAROOT $who") ? $self->Results : undef;
 }
 
+# BUG? using user/$User here and INBOX in quota/quota_usage
 sub getquota {
     my ( $self, $what ) = @_;
-    my $who = $what ? $self->Massage($what) : "user/$self->{User}";
+    my $who = $what ? $self->Massage($what) : "user/" . $self->User;
     return $self->_imap_command("GETQUOTA $who") ? $self->Results : undef;
 }
 
-# usage: $self->setquota($folder, storage => 512)
+# usage: $self->setquota($quotaroot, storage => 512, ...)
 sub setquota(@) {
     my ( $self, $what ) = ( shift, shift );
-    my $who = $what ? $self->Massage($what) : "user/$self->{User}";
+    my $who = $what ? $self->Massage($what) : "user/" . $self->User;
     my @limits;
     while (@_) {
-        my $key = uc shift @_;
-        push @limits, $key => shift @_;
+        my ( $k, $v ) = ( $self->Quote( uc( shift @_ ) ), shift @_ );
+        push( @limits, "($k $v)" );
     }
-    local $" = ' ';
-    $self->_imap_command("SETQUOTA $who (@limits)") ? $self->Results : undef;
+    my $limits = join( ' ', @limits );
+    $self->_imap_command("SETQUOTA $who $limits") ? $self->Results : undef;
 }
 
 sub quota {
-    my $self = shift;
-    my $what = shift || "INBOX";
-    $self->_imap_command("GETQUOTA $what") or $self->getquotaroot($what);
-    ( map { /.*STORAGE\s+\d+\s+(\d+).*\n$/ ? $1 : () } $self->Results )[0];
+    my ( $self, $what ) = ( shift, shift || "INBOX" );
+    my $tref = $self->getquota($what) or return undef;
+    shift @$tref;    # pop off command
+    return ( map { /.*STORAGE\s+\d+\s+(\d+).*\n$/ ? $1 : () } @$tref )[0];
 }
 
 sub quota_usage {
-    my $self = shift;
-    my $what = shift || "INBOX";
-    $self->_imap_command("GETQUOTA $what") || $self->getquotaroot($what);
-    ( map { /.*STORAGE\s+(\d+)\s+\d+.*\n$/ ? $1 : () } $self->Results )[0];
+    my ( $self, $what ) = ( shift, shift || "INBOX" );
+    my $tref = $self->getquota($what) or return undef;
+    shift @$tref;    # pop off command
+    return ( map { /.*STORAGE\s+(\d+)\s+\d+.*\n$/ ? $1 : () } @$tref )[0];
 }
 
 sub Quote($) { $_[0]->Massage( $_[1], NonFolderArg ) }
