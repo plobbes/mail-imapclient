@@ -1416,23 +1416,39 @@ The B<get_header> method is a short-cut for:
 
   my $messageId = $imap->parse_headers($msg,"Subject")->{"Subject"}[0];
 
+=head2 getquotaroot
+
+Example:
+
+  my $results = $imap->getquotaroot($mailboxname)
+    or die "Could not getquotaroot for $mailboxname: $@\n";
+
+The B<getquotaroot> method implements the RFC2087 GETQUOTAROOT
+command.  The "$mailboxname" defaults to "INBOX" if no argument is
+provided.
+
+On error C<undef> is returned, otherwise L</Results> are returned.
+The results should have the untagged QUOTAROOT response from the
+server along with the QUOTAROOT's resource usage and limits in an
+untagged QUOTA response.
+
+See also B<RFC2087>, L</getquota>, L</setquota>, L</quota> and L</quota_usage>.
+
 =head2 getquota
 
 Example:
 
-  my $hash = $imap->getquota($quotaroot)
+  my $results = $imap->getquota($quotaroot)
     or die "Could not getquota for $quotaroot: $@\n";
 
-The B<getquota> method implements the RFC2087 GETQUOTA command.  It
-accepts one "quota root" argument.  If no argument is provided, a
-default "quota root" of "user/I<User>" is used.
+The B<getquota> method implements the RFC2087 GETQUOTA command.  The
+"$quotaroot" defaults to "user/I<User>" if no argument is provided.
 
-On error C<undef> is returned, otherwise an ARRAY/ARRAYREF is returned
-depending upon LIST/SCALAR context of the caller.  The contents of the
-ARRAY should contain L</Results> from the server which should have the
-untagged QUOTA response from the server.
+On error C<undef> is returned, otherwise L</Results> are returned.
+The results from the server should have the untagged QUOTA response
+from the server.
 
-See also B<RFC2087>, L</getquotaroot>, L</setquota>, L</quota> and L</quota_usage>.
+See also B<RFC2087>, L</getquotaroot>, L</quota> and L</quota_usage>.
 
 =head2 quota
 
@@ -1441,15 +1457,14 @@ Example:
   my $limit = $imap->quota($quotaroot)
     or die "Could not get quota limit for $quotaroot: $@\n";
 
-The B<quota> method takes the results from L<getquota> and parses out
-the limit returned by the server.  It accepts one "quota root"
-argument.  If no argument is provided, a default "quota root" of
-"INBOX" is used.
+The B<quota> method takes the L</Results> from L<getquota> and parses
+out the "STORAGE" limit returned by the server.  The "$quotaroot"
+defaults to "INBOX" if no argument is provided.
 
-On error C<undef> is returned, otherwise the integer limit provided by
-the server is returned.
+On error C<undef> is returned, otherwise the integer "STORAGE" limit
+provided by the server is returned.
 
-See also B<RFC2087>, L</getquotaroot> and L</getquota>.
+See also B<RFC2087>, L</getquotaroot>, L</getquota> and L</quota_usage>.
 
 =head2 quota_usage
 
@@ -1458,33 +1473,29 @@ Example:
   my $usage = $imap->quota_usage($quotaroot)
     or die "Could not get quota usage for $quotaroot: $@\n";
 
-The B<quota_usage> method takes the results from L<getquota> and
-parses out the usage returned by the server.  It accepts one "quota
-root" argument.  If no argument is provided, a default "quota root" of
-"INBOX" is used.
+The B<quota_usage> method takes the L</Results> from L<getquota> and
+parses out the "STORAGE" usage returned by the server.  The
+"$quotaroot" defaults to "INBOX" if no argument is provided.
 
-On error C<undef> is returned, otherwise the integer usage provided by
-the server is returned.
+On error C<undef> is returned, otherwise the integer "STORAGE" usage
+provided by the server is returned.
 
-See also B<RFC2087>, L</getquotaroot> and L</getquota>.
+See also B<RFC2087>, L</getquotaroot>, L</getquota> and L</quota>.
 
 =head2 setquota
 
 Example:
 
-  my $hash = $imap->setquota( $quotaroot, $resource, $limit )
+  my $results = $imap->setquota( $quotaroot, $resource, $limit )
     or die "Could not setquota for $quotaroot: $@\n";
 
 The B<setquota> method implements the RFC2087 SETQUOTA command.  It
-accepts multiple pairs of $resource and $limit arguments.  If no
-$quotaroot argument is provided, a default "quota root" of
-"user/I<User>" is used.
+accepts multiple pairs of $resource and $limit arguments.  The
+"$quotaroot" defaults to "user/I<User>" if not defined.
 
-On error C<undef> is returned, otherwise an ARRAY/ARRAYREF is returned
-depending upon LIST/SCALAR context of the caller.  The contents of the
-ARRAY should contain L</Results> from the server.
+On error C<undef> is returned, otherwise L</Results> are returned.
 
-See also B<RFC2087>, L</getquotaroot>, and L</getquota>.
+See also B<RFC2087>, L</getquotaroot> and L</getquota>.
 
 =head2 is_parent
 
