@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.32';
+our $VERSION = '3.33_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -3214,18 +3214,12 @@ sub authenticate {
 sub copy {
     my ( $self, $target, @msgs ) = @_;
 
-    $target = $self->Massage($target);
-    @msgs =
-        $self->Ranges
-      ? $self->Range(@msgs)
-      : sort { $a <=> $b } map { ref $_ ? @$_ : split( ',', $_ ) } @msgs;
-
     my $msgs =
         $self->Ranges
       ? $self->Range(@msgs)
       : join ',', map { ref $_ ? @$_ : $_ } @msgs;
 
-    $self->_imap_uid_command( COPY => $msgs, $target )
+    $self->_imap_uid_command( COPY => $msgs, $self->Massage($target) )
       or return undef;
 
     my @results = $self->History;

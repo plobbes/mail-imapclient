@@ -1818,7 +1818,7 @@ See also C<Supportedflags>.
 
 Example:
 
-  my $newUid = $imap->move($newFolder, $oldUid)
+  my $newUid = $imap->move( $newFolder, $oldUid )
     or die "Could not move: $@\n";
   $imap->expunge;
 
@@ -1829,15 +1829,15 @@ be either:
 
 =over 4
 
-=item >
+=item a)
 
 a message sequence number,
 
-=item >
+=item b)
 
 a comma-separated list of message sequence numbers, or
 
-=item >
+=item c)
 
 a reference to an array of message sequence numbers.
 
@@ -1847,15 +1847,15 @@ If the L</Uid> parameter is true, then the arguments should be:
 
 =over 4
 
-=item >
+=item a)
 
 a message UID,
 
-=item >
+=item b)
 
 a comma-separated list of message UID's, or
 
-=item >
+=item c)
 
 a reference to an array of message UID's.
 
@@ -1867,8 +1867,8 @@ If move is successful, then it returns a true value.  Furthermore, if
 the Mail::IMAPClient object is connected to a server that has the
 UIDPLUS capability, then the true value will be the comma-separated
 list of UID's for the newly copied messages.  The list will be in the
-order in which the messages were moved.  (Since B<move> uses the copy
-method, the messages will be moved in numerical order.)
+order in which the messages were moved which should correspond to the
+order of the message UID provided by the caller.
 
 If the move is not successful then B<move> returns C<undef>.
 
