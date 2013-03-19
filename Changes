@@ -5,7 +5,9 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.33_01: Thu, Sep 06, 2012  9:32:43 AM
+version 3.33_02: Mon, Mar 18, 2013  8:37:32 PM
+	- rt.cpan.org#84028: get_envelope() fails when subject ends w/backslash
+	  [Andy Lyttle]
 	- rt.cpan.org#79476: move()/copy() with sequence causes numeric warning
 	  [Oleg G]
 	- *move()/copy() no longer sort message(s) provided by caller

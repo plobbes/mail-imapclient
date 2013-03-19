@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.33_01';
+our $VERSION = '3.33_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2029,7 +2029,8 @@ sub get_envelope {
         eval { $bs = $class->new($output) };    # BUG? localize $@ here?
     }
 
-    $self->_debug( "get_envelope: msg $msg returns ref: " . $bs || "UNDEF" );
+    $self->_debug(
+        "get_envelope: msg $msg returns ref: " . ( $bs || "UNDEF" ) );
     $bs;
 }
 
