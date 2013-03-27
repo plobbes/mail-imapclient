@@ -3444,11 +3444,13 @@ fancier authentication method, see L</RawSocket>.
 
 If an IMAP connection must start TLS/SSL after connecting to a server
 then set this attribute.  If the value is set to an arrayref then they
-will be used as arguments to IO::Socket::SSL::start_SSL.  By default
+will be used as arguments to IO::Socket::SSL->start_SSL.  By default
 this connection is set to blocking while establishing the connection
 with a timeout of 30 seconds.  The socket will be reset to the
 original blocking/non-blocking value after a successful TLS
-negotiation has occured.
+negotiation has occured.  The arguments used in the call to start_SSL
+can be controlled by setting this attribute to an ARRAY reference
+containing the desired arguments.
 
 Version note: attribute added in Mail::IMAPClient 3.22
 
@@ -3457,7 +3459,9 @@ Version note: attribute added in Mail::IMAPClient 3.22
 If an IMAP connection requires SSL you can set the Ssl attribute to
 '1' and Mail::IMAPClient will automatically use L<IO::Socket::SSL>
 instead of L<IO::Socket::INET> to connect to the server.  This
-attribute is used in the L</connect> method.
+attribute is used in the L</connect> method.  The arguments used in
+the call to IO::Socket::SSL->new can be controlled by setting this
+attribute to an ARRAY reference containing the desired arguments.
 
 See also L</connect> for details on connection initiatiation and
 L</Socket> and L</Rawsocket> if you need to take more control of

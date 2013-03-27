@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.33_02';
+our $VERSION = '3.33_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -331,7 +331,17 @@ sub connect(@) {
     }
     else {
         my $ioclass = "IO::Socket::INET";
-        $ioclass = $self->_load_module("SSL") if ( $self->Ssl );
+        my @args;
+
+        if ( $self->Ssl ) {
+            $ioclass = $self->_load_module("SSL");
+
+            # give caller control of args to new if desired
+            @args =
+                ( ref( $self->Ssl ) eq "ARRAY" )
+              ? ( @{ $self->Ssl } )
+              : ();
+        }
 
         if ($ioclass) {
             $self->_debug("Connecting via $ioclass to $server:$port @timeout");
@@ -340,7 +350,8 @@ sub connect(@) {
                 PeerPort => $port,
                 Proto    => 'tcp',
                 Debug    => $self->Debug,
-                @timeout
+                @timeout,
+                @args
             );
         }
     }
@@ -2724,17 +2735,15 @@ sub restore_message {
     scalar grep /^\*\s\d+\sFETCH\s\(.*FLAGS.*(?!\\Deleted)/, $self->Results;
 }
 
-#??? compare to uidnext.  Why is Massage missing?
 sub uidvalidity {
     my ( $self, $folder ) = @_;
     $self->status( $folder, "UIDVALIDITY" ) or return undef;
-    my $vline = first { /UIDVALIDITY/i } $self->History;
-    defined $vline && $vline =~ /\(UIDVALIDITY\s+([^\)]+)/ ? $1 : undef;
+    my $line = first { /UIDVALIDITY/i } $self->History;
+    defined $line && $line =~ /\(UIDVALIDITY\s+([^\)]+)/ ? $1 : undef;
 }
 
 sub uidnext {
-    my $self   = shift;
-    my $folder = $self->Massage(shift);
+    my ( $self, $folder ) = @_;
     $self->status( $folder, "UIDNEXT" ) or return undef;
     my $line = first { /UIDNEXT/i } $self->History;
     defined $line && $line =~ /\(UIDNEXT\s+([^\)]+)/ ? $1 : undef;
