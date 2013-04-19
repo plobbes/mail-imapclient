@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.33_03';
+our $VERSION = '3.33_05';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -59,9 +59,13 @@ sub _load_module {
     my $modkey = shift;
     my $module = $Load_Module{$modkey} || $modkey;
 
-    eval "require $module";
-    if ($@) {
-        $self->LastError("Unable to load '$module': $@");
+    my $err = do {
+        local ($@);
+        eval "require $module";
+        $@;
+    };
+    if ($err) {
+        $self->LastError("Unable to load '$module': $err");
         return undef;
     }
     return $module;
@@ -118,6 +122,8 @@ sub LastError {
             Carp::cluck($emsg);
         }
     }
+
+    # 2.x API support requires setting $@
     $@ = $self->{LastError} = $err;
 }
 
@@ -361,7 +367,8 @@ sub connect(@) {
         return $self->Socket($sock);
     }
     else {
-        $self->LastError("Unable to connect to $server: $@");
+        my $lasterr = $self->LastError || "";
+        $self->LastError("Unable to connect to $server: $lasterr");
         return undef;
     }
 }
@@ -1959,32 +1966,34 @@ sub get_bodystructure {
     my $out = $self->fetch( $msg, "BODYSTRUCTURE" ) or return undef;
 
     my $bs = "";
-    my $output = first { /BODYSTRUCTURE\s+\(/i } @$out;    # Wee! ;-)
-    if ( $output =~ /$CRLF$/o ) {
-        $bs = eval { $class->new($output) };    # BUG? localize $@ here?
-    }
-    else {
+    my $output = first { /BODYSTRUCTURE\s+\(/i } @$out;
+
+    unless ( $output =~ /$CRLF$/o ) {
+        $output = '';
         $self->_debug("get_bodystructure: reassembling original response");
         my $started = 0;
-        my $output  = '';
         foreach my $o ( $self->_transaction ) {
             next unless $self->_is_output_or_literal($o);
             $started++ if $o->[DATA] =~ /BODYSTRUCTURE \(/i;
-            ;                                   # Hi, vi! ;-)
             $started or next;
 
-            if ( length $output && $self->_is_literal($o) ) {
+            if ( length($output) && $self->_is_literal($o) ) {
                 my $data = $o->[DATA];
                 $data =~ s/"/\\"/g;
                 $data =~ s/\(/\\\(/g;
                 $data =~ s/\)/\\\)/g;
                 $output .= qq("$data");
             }
-            else { $output .= $o->[DATA] }
-
-            $self->_debug("get_bodystructure: reassembled output=$output<END>");
+            else {
+                $output .= $o->[DATA];
+            }
         }
-        eval { $bs = $class->new($output) };    # BUG? localize $@ here?
+        $self->_debug("get_bodystructure: reassembled output=$output<END>");
+    }
+
+    {
+        local ($@);
+        $bs = eval { $class->new($output) };
     }
 
     $self->_debug(
@@ -2003,25 +2012,15 @@ sub get_envelope {
     my $out = $self->fetch( $msg, 'ENVELOPE' ) or return undef;
 
     my $bs = "";
-    my $output = first { /ENVELOPE \(/i } @$out;    # vi ;-)
+    my $output = first { /ENVELOPE \(/i } @$out;
 
-    unless ($output) {
-        $self->LastError("Unable to use get_envelope: $@");
-        return undef;
-    }
-
-    if ( $output =~ /$CRLF$/o ) {
-        eval { $bs = $class->new($output) };    # BUG? localize $@ here?
-    }
-    else {
+    unless ( $output =~ /$CRLF$/o ) {
+        $output = '';
         $self->_debug("get_envelope: reassembling original response");
         my $started = 0;
-        $output = '';
         foreach my $o ( $self->_transaction ) {
             next unless $self->_is_output_or_literal($o);
-            $self->_debug("o->[DATA] is $o->[DATA]");
-
-            $started++ if $o->[DATA] =~ /ENVELOPE \(/i;    # Hi, vi! ;-)
+            $started++ if $o->[DATA] =~ /ENVELOPE \(/i;
             $started or next;
 
             if ( length($output) && $self->_is_literal($o) ) {
@@ -2029,19 +2028,22 @@ sub get_envelope {
                 $data =~ s/"/\\"/g;
                 $data =~ s/\(/\\\(/g;
                 $data =~ s/\)/\\\)/g;
-                $output .= '"' . $data . '"';
+                $output .= qq("$data");
             }
             else {
                 $output .= $o->[DATA];
             }
-            $self->_debug("get_envelope: reassembled output=$output<END>");
         }
+        $self->_debug("get_envelope: reassembled output=$output<END>");
+    }
 
-        eval { $bs = $class->new($output) };    # BUG? localize $@ here?
+    {
+        local ($@);
+        $bs = eval { $class->new($output) };
     }
 
     $self->_debug(
-        "get_envelope: msg $msg returns ref: " . ( $bs || "UNDEF" ) );
+        "get_envelope: msg $msg returns: " . ( $bs || "UNDEF" ) );
     $bs;
 }
 
