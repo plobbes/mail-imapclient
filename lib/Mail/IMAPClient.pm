@@ -2043,8 +2043,7 @@ sub get_envelope {
         $bs = eval { $class->new($output) };
     }
 
-    $self->_debug(
-        "get_envelope: msg $msg returns: " . ( $bs || "UNDEF" ) );
+    $self->_debug( "get_envelope: msg $msg returns: " . ( $bs || "UNDEF" ) );
     $bs;
 }
 
