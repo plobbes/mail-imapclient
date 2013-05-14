@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.33_05';
+our $VERSION = '3.33';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -135,7 +135,7 @@ sub Fast_io(;$) {
     my $socket = $self->{Socket}
       or return undef;
 
-    local ($@);    # avoid stomping on global $@
+    local ( $@, $! );    # avoid stomping on globals
     unless ($use) {
         eval { fcntl( $socket, F_SETFL, delete $self->{_fcntl} ) }
           if exists $self->{_fcntl};
@@ -907,6 +907,7 @@ sub message_to_file {
     }
     else {
         $$file = "" if ( ref $file eq "SCALAR" and !defined $$file );
+        local ($!);
         open( $fh, ">>", $file );
         unless ( defined($fh) ) {
             $self->LastError("Unable to open file '$file': $!");
@@ -1901,7 +1902,7 @@ sub _disconnect {
     delete $self->{_IMAP4REV1};
     $self->State(Unconnected);
     if ( my $sock = delete $self->{Socket} ) {
-        local ($@);    # avoid stomping on global $@
+        local ($@);
         eval { $sock->close };
     }
     return $self;
@@ -2976,6 +2977,7 @@ sub append_file {
         # $file can be a name or a scalar reference (for in memory file)
         # avoid IO::File bug handling scalar refs in perl <= 5.8.8?
         # - buggy: $fh = IO::File->new( $file, 'r' )
+        local ($!);
         open( $fh, "<", $file )
           or push( @err, "Unable to open file '$file': $!" );
     }

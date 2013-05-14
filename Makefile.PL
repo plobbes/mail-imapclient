@@ -58,6 +58,7 @@ WriteMakefile(
     AUTHOR           => 'Phil Pearl (Lobbes) <phil@zimbra.com>',
     ABSTRACT         => 'IMAP4 client library',
     VERSION_FROM     => 'lib/Mail/IMAPClient.pm',
+    LICENSE          => 'perl',
     MIN_PERL_VERSION => '5.008',
     PREREQ_PM        => {
         'Carp'              => 0,
