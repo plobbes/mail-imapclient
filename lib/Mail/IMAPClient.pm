@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.34_01';
+our $VERSION = '3.34_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -723,12 +723,8 @@ sub _folders_or_subscribed {
 sub folders {
     my ( $self, $what ) = @_;
 
-    return wantarray ? @{ $self->{Folders} } : $self->{Folders}
-      if !$what && $self->{Folders};
-
     my @folders =
       map( $_->{name}, $self->_folders_or_subscribed( "list", $what ) );
-    $self->{Folders} = \@folders unless $what;
     return wantarray ? @folders : \@folders;
 }
 
@@ -1909,7 +1905,6 @@ sub _disconnect {
     my $self = shift;
 
     delete $self->{CAPABILITY};
-    delete $self->{Folders};
     delete $self->{_IMAP4REV1};
     $self->State(Unconnected);
     if ( my $sock = delete $self->{Socket} ) {
@@ -2281,7 +2276,6 @@ sub fetch_hash {
 
 sub store {
     my ( $self, @a ) = @_;
-    delete $self->{Folders};
     $self->_imap_uid_command( STORE => @a )
       or return undef;
     return wantarray ? $self->History : $self->Results;
@@ -2289,7 +2283,6 @@ sub store {
 
 sub _imap_folder_command($$@) {
     my ( $self, $command ) = ( shift, shift );
-    delete $self->{Folders};
     my $folder = $self->Massage(shift);
 
     $self->_imap_command( join ' ', $command, $folder, @_ )
@@ -2314,7 +2307,6 @@ sub myrights($) { $_[0]->_imap_folder_command( MYRIGHTS => $_[1] ) }
 
 sub close {
     my $self = shift;
-    delete $self->{Folders};
     $self->_imap_command('CLOSE')
       or return undef;
     return wantarray ? $self->History : $self->Results;
