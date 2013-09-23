@@ -33,7 +33,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 85;
+      : plan tests    => 88;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -101,6 +101,16 @@ my ( $target, $target2 ) =
 ok( defined $ispar, "INBOX is_parent '$ispar' (note: target '$target')" );
 
 ok( $imap->select('inbox'), "select inbox" );
+
+# folders
+{
+    my @f = $imap->folders();
+    ok( @f, "folders" . ( $debug ? ":@f" : "" ) );
+    my @fh = $imap->folders_hash();
+    my @fh_keys = qw(attrs delim name);
+    ok( @fh, "folders_hash keys: @fh_keys" );
+    ok( eq_set( ( [ keys %{ $fh[0] } ], [ @fh_keys ] ) ) );
+}
 
 # test append_file
 my $append_file_size;

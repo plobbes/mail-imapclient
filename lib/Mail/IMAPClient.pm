@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.33';
+our $VERSION = '3.34_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -253,7 +253,7 @@ sub Transaction { shift->Count }
 # remove doubles from list
 sub _remove_doubles(@) {
     my %seen;
-    grep { !$seen{$_}++ } @_;
+    grep { !$seen{ $_->{name} }++ } @_;
 }
 
 # the constructor:
@@ -668,6 +668,7 @@ sub _list_or_lsub {
 sub list { shift->_list_or_lsub( "LIST", @_ ) }
 sub lsub { shift->_list_or_lsub( "LSUB", @_ ) }
 
+# deprecated 3.34
 sub xlist {
     my ($self) = @_;
     return undef unless $self->has_capability("XLIST");
@@ -710,7 +711,7 @@ sub _folders_or_subscribed {
             foreach my $resp (@list) {
                 my $rec = $self->_list_or_lsub_response_parse($resp);
                 next unless defined $rec->{name};
-                push @folders, $rec->{name};
+                push @folders, $rec;
             }
         }
     };
@@ -725,11 +726,20 @@ sub folders {
     return wantarray ? @{ $self->{Folders} } : $self->{Folders}
       if !$what && $self->{Folders};
 
-    my @folders = $self->_folders_or_subscribed( "list", $what );
+    my @folders =
+      map( $_->{name}, $self->_folders_or_subscribed( "list", $what ) );
     $self->{Folders} = \@folders unless $what;
     return wantarray ? @folders : \@folders;
 }
 
+sub folders_hash {
+    my ( $self, $what ) = @_;
+
+    my @folders_hash = $self->_folders_or_subscribed( "list", $what );
+    return wantarray ? @folders_hash : \@folders_hash;
+}
+
+# deprecated 3.34
 sub xlist_folders {
     my ($self) = @_;
     my $xlist = $self->xlist;
@@ -751,7 +761,8 @@ sub xlist_folders {
 
 sub subscribed {
     my ( $self, $what ) = @_;
-    my @folders = $self->_folders_or_subscribed( "lsub", $what );
+    my @folders =
+      map( $_->{name}, $self->_folders_or_subscribed( "lsub", $what ) );
     return wantarray ? @folders : \@folders;
 }
 
