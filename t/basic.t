@@ -57,7 +57,6 @@ my $imap = Mail::IMAPClient->new(
     %new_args,
     Range    => $range,
     Debug_fh => ( $debug ? IO::File->new( 'imap1.debug', 'w' ) : undef ),
-    Socketargs => [ MultiHomed => 1 ],
 );
 
 ok( defined $imap, 'created client' );
