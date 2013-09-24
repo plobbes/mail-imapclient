@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.34_02';
+our $VERSION = '3.34_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1335,6 +1335,44 @@ sub _imap_command_do {
     }
 }
 
+sub _response_code_sub {
+    my ( $self, $tag, $good ) = @_;
+
+    # tag/good can be a ref (compiled regex) otherwise quote it
+    my $qtag  = ref($tag)  ? $tag  : defined($tag)  ? quotemeta($tag)  : undef;
+    my $qgood = ref($good) ? $good : defined($good) ? quotemeta($good) : undef;
+
+    # using closure, a variable alias, and sub returns on first match
+    # - $_[0] is $o->[DATA]
+    # - returns list ( $code, $byemsg )
+    my $getcodesub = sub {
+        if ( defined $qgood ) {
+            if ( $good eq '+' and $_[0] =~ /^$qgood/ ) {
+                return ($good);
+            }
+            if ( defined $qtag and $_[0] =~ /^$qtag\s+($qgood)/i ) {
+                return ( ref($qgood) ? $1 : uc($1) );
+            }
+        }
+        if ( defined $qtag ) {
+            if ( $tag eq '+' and $_[0] =~ /^$qtag/ ) {
+                return ($tag);
+            }
+            if ( $_[0] =~ /^$qtag\s+(OK|BAD|NO)\b/i ) {
+                my $code = uc($1);
+                $self->LastError( $_[0] ) unless ( $code eq 'OK' );
+                return ($code);
+            }
+        }
+        if ( $_[0] =~ /^\*\s+(BYE)\b/i ) {
+            return ( uc($1), $_[0] );    # ( 'BYE', $byemsg )
+        }
+        return (undef);
+    };
+
+    return $getcodesub;
+}
+
 # _get_response get IMAP response optionally send data somewhere
 # options:
 #   outref => GLOB|CODE - reference to send output to (see _read_line)
@@ -1344,15 +1382,12 @@ sub _get_response {
     my $tag  = shift;
     my $good = shift;
 
-    # tag can be a ref (compiled regex) or we quote it or default to \S+
-    my $qtag = ref($tag) ? $tag : defined($tag) ? quotemeta($tag) : qr/\S+/;
-    my $qgood = ref($good) ? $good : defined($good) ? quotemeta($good) : undef;
-
-    my $outref = $opt->{outref};
+    my $outref  = $opt->{outref};
     my @readopt = defined($outref) ? ($outref) : ();
+    my $getcode = $self->_response_code_sub( $tag, $good );
 
     my ( $count, $out, $code, $byemsg ) = ( $self->Count, [], undef, undef );
-    until ( defined($code) ) {
+    until ( defined $code ) {
         my $output = $self->_read_line(@readopt) or return undef;
         $out = $output;    # keep last response just in case
 
@@ -1361,30 +1396,13 @@ sub _get_response {
         foreach my $o (@$output) {
             $self->_record( $count, $o );
             $self->_is_output($o) or next;
-
-            my $data = $o->[DATA];
-            if ( $good and $good ne '+' and $data =~ /^$qtag\s+($qgood)/i ) {
-                $code = $1;
-                $code = uc($code) unless ref($good);
-            }
-            elsif ( $good and $good eq '+' and $data =~ /^$qgood/ ) {
-                $code = $good;
-            }
-            elsif ( $tag eq '+' and $data =~ /^$qtag/ ) {
-                $code = $tag;
-            }
-            elsif ( $data =~ /^$qtag\s+(OK|BAD|NO)\b/i ) {
-                $code = uc($1);
-                $self->LastError($data) unless ( $code eq 'OK' );
-            }
-            elsif ( $data =~ /^\*\s+(BYE)\b/i ) {
-                $code   = uc($1);
-                $byemsg = $data;
-            }
+            my ( $tcode, $tbyemsg ) = $getcode->( $o->[DATA] );
+            $code   = $tcode   if ( defined $tcode );
+            $byemsg = $tbyemsg if ( defined $tbyemsg );
         }
     }
 
-    if ( defined($code) ) {
+    if ( defined $code ) {
         $code =~ s/$CR?$LF?$//o;
         $code = uc($code) unless ( $good and $code eq $good );
 
@@ -1459,8 +1477,8 @@ sub _send_line {
         $self->_debug("Sending literal: $first\tthen: $string");
         $self->_send_line($first) or return undef;
 
-        # look for "<anything> OK|NO|BAD" or "+..."
-        my $code = $self->_get_response( qr(\S+), '+' ) or return undef;
+        # look for "+..."
+        my $code = $self->_get_response('+') or return undef;
         return undef unless $code eq '+';
     }
 
