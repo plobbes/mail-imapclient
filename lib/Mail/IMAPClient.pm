@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.34_03';
+our $VERSION = '3.34_04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -48,7 +48,9 @@ my %SEARCH_KEYS = map { ( $_ => 1 ) } qw(
 # modules require(d) during runtime when applicable
 my %Load_Module = (
     "Compress-Zlib" => "Compress::Zlib",
+    "INET"          => "IO::Socket::INET",
     "SSL"           => "IO::Socket::SSL",
+    "UNIX"          => "IO::Socket::UNIX",
     "BodyStructure" => "Mail::IMAPClient::BodyStructure",
     "Envelope"      => "Mail::IMAPClient::BodyStructure::Envelope",
     "Thread"        => "Mail::IMAPClient::Thread",
@@ -92,8 +94,8 @@ BEGIN {
         Debug Debug_fh Domain Folder Ignoresizeerrors Keepalive
         Maxappendstringlength Maxcommandlength Maxtemperrors
         Password Peek Port Prewritemethod Proxy Ranges Readmethod
-        Readmoremethod Reconnectretry Server Showcredentials Ssl Starttls
-        Supportedflags Timeout Uid User)
+        Readmoremethod Reconnectretry Server Showcredentials
+        Socketargs Ssl Starttls Supportedflags Timeout Uid User)
       )
     {
         no strict 'refs';
@@ -322,44 +324,43 @@ sub connect(@) {
     # BUG? We should restrict which keys can be passed/set here.
     %$self = ( %$self, @_ ) if @_;
 
-    my $server  = $self->Server;
-    my $port    = $self->Port || $self->Port( $self->Ssl ? "993" : "143" );
-    my @timeout = $self->Timeout ? ( Timeout => $self->Timeout ) : ();
-    my $sock;
+    my @sockargs = $self->Timeout ? ( Timeout => $self->Timeout ) : ();
+    push( @sockargs, $self->Debug ? ( Debug => $self->Debug ) : () );
+
+    # give caller control of IO::Socket::... args to new if desired
+    if ( $self->Socketargs and ref $self->Socketargs eq "ARRAY" ) {
+        push( @sockargs, @{ $self->Socketargs } );
+    }
+
+    my $server = $self->Server;
+    my $port = $self->Port || $self->Port( $self->Ssl ? "993" : "143" );
+    my ( $ioclass, $sock );
 
     if ( File::Spec->file_name_is_absolute($server) ) {
-        $self->_debug("Connecting to unix socket $server @timeout");
-        $sock = IO::Socket::UNIX->new(
-            Peer  => $server,
-            Debug => $self->Debug,
-            @timeout
-        );
+        $ioclass = $self->_load_module("UNIX");
+        unshift( @sockargs, Peer => $server );
     }
     else {
-        my $ioclass = "IO::Socket::INET";
-        my @args;
+        unshift(
+            @sockargs,
+            PeerAddr => $server,
+            PeerPort => $port,
+            Proto    => "tcp",
+        );
 
+        # extra control of SSL args is supported
         if ( $self->Ssl ) {
             $ioclass = $self->_load_module("SSL");
-
-            # give caller control of args to new if desired
-            @args =
-                ( ref( $self->Ssl ) eq "ARRAY" )
-              ? ( @{ $self->Ssl } )
-              : ();
+            push( @sockargs, @{ $self->Ssl } ) if ref $self->Ssl eq "ARRAY";
         }
-
-        if ($ioclass) {
-            $self->_debug("Connecting via $ioclass to $server:$port @timeout");
-            $sock = $ioclass->new(
-                PeerAddr => $server,
-                PeerPort => $port,
-                Proto    => 'tcp',
-                Debug    => $self->Debug,
-                @timeout,
-                @args
-            );
+        else {
+            $ioclass = $self->_load_module("INET");
         }
+    }
+
+    if ($ioclass) {
+        $self->_debug("Connecting with $ioclass @sockargs");
+        $sock = $ioclass->new(@sockargs);
     }
 
     if ($sock) {

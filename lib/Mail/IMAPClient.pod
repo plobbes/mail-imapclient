@@ -3488,6 +3488,23 @@ containing the desired arguments.
 
 Version note: attribute added in Mail::IMAPClient 3.22
 
+=head2 Socketargs
+
+The arguments used in the call to IO::Socket::{UNIX|INET|SSL}->new can
+be controlled by setting this attribute to an ARRAY reference
+containing the desired arguments.
+
+For example, to always pass MultiHomed => 1 to IO::Socket::...->new
+the following can be used:
+
+  $imap = Mail::IMAPClient->new(
+    ..., Socketargs => [ MultiHomed => 1 ], ...
+  );
+
+See also L</Ssl> for specific control of the args to IO::Socket::SSL.
+
+Version note: attribute added in Mail::IMAPClient 3.34
+
 =head2 Ssl
 
 If an IMAP connection requires SSL you can set the Ssl attribute to
