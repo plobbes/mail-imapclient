@@ -9,6 +9,7 @@ version 3.34_03: Tue, Sep 24, 2013 11:26:12 AM
 	- untagged server data during send literal may cause client to hang
 	  [Arthur Wolfe, Josh Hillman]
 	  + _send_line() needs '+' only to know it is OK to send LITERAL data
+	  + created _response_code_sub() to simplify _get_response()
 	- remove internal "Folders" cache
 	- Allow for RFC 6154 "IMAP LIST Extension for Special-Use Mailboxes"
 	  [Mathias Reitinger]
