@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.34';
+our $VERSION = '3.35_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -535,7 +535,7 @@ sub compress {
             return $ret if ( !$ret && !$lz );    # $ret is undef or 0
         }
 
-        # accummulate inflated data in $Ibuf
+        # accumulate inflated data in $Ibuf
         if ($lz) {
             my ( $tbuf, $rc ) = $io->inflate( \$Zbuf );
             unless ( $rc == $zcl->Z_OK ) {
@@ -1959,7 +1959,7 @@ sub _list_or_lsub_response_parse {
     return wantarray ? %info : \%info;
 }
 
-# handle listeral data returned in list/lsub responses
+# handle literal data returned in list/lsub responses
 # some example responses:
 # * LIST () "/" "My Folder"    # nothing to do here...
 # * LIST () "/" {9}            # the {9} is already removed by _read_line()
