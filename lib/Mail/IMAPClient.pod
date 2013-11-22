@@ -235,8 +235,7 @@ returned by B<Quote>.
 
 Note this method should not be used on folder names for
 Mail::IMAPClient methods, since methods that accept folder names as an
-argument will quote the folder name arguments appropriately
-automatically.
+argument will quote the folder name arguments automatically.
 
 If you are getting unexpected results when running methods with values
 that have (or might have) embedded spaces, double quotes, braces, or
@@ -1689,20 +1688,23 @@ Example:
 
   $imap->search(HEADER => 'Message-id' => $imap->Massage($msg_id,1));
 
+WARNING: This method may be deprecated in the future, consider using
+L</Quote> instead of this method.
+
 The B<Massage> method accepts a value as an argument and, optionally,
 a second value that, when true, indicates that the first argument is
 not the name of an existing folder.
+
+WARNING: If the first argument has double quotes at the beginning and
+end of its value, those double quote will be stripped unless the
+second argument does not evaluate to true.
 
 It returns its argument as a correctly quoted string or a literal
 string.
 
 Note that you should rarely use this on folder names, since methods
-that accept folder names as an argument will call B<Massage> for
-you. In fact, it was originally developed as an undocumented helper
-method meant for internal Mail::IMAPClient methods only.
-
-You may also want to see the L</Quote> method, which is related to
-this method.
+that accept folder names as an argument will call B<Quote> for
+you.
 
 =head2 message_count
 
@@ -3655,18 +3657,34 @@ object, but are particularly useful for determining the cause of
 failure when a connection and login are attempted as part of a single
 L</new> method invocation.  The status methods are:
 
+=head2 Escaped_history
+
+Example:
+
+  my @history = $imap->Escaped_history;
+
+The B<Escaped_history> method is almost identical to the B<History>
+method.  Unlike the B<History> method, however, server output
+transmitted literally will be wrapped in double quotes, with all
+double quotes, backslashes escaped.  If called in a scalar context,
+B<Escaped_history> returns an array reference rather than an array.
+
+B<Escaped_history> is useful if you are retrieving output and
+processing it manually, and you are depending on the above special
+characters to delimit the data.  It is not useful when retrieving
+message contents; use B<message_string> or B<body_string> for that.
+
 =head2 Escaped_results
 
 Example:
 
   my @results = $imap->Escaped_results;
 
-The B<Escaped_results> method is almost identical to the B<History>
-method.  Unlike the B<History> method, however, server output
-transmitted literally will be wrapped in double quotes, with all of
-the parentheses, double quotes, backslashes, newlines, and carriage
-returns escaped.  If called in a scalar context, B<Escaped_results>
-returns an array reference rather than an array.
+The B<Escaped_results> method is almost identical to the B<Results>
+method.  Unlike the B<Results> method, however, server output
+transmitted literally will be wrapped in double quotes, with all
+double quotes, backslashes escaped.  If called in a scalar context,
+B<Escaped_results> returns an array reference rather than an array.
 
 B<Escaped_results> is useful if you are retrieving output and
 processing it manually, and you are depending on the above special
