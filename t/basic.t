@@ -33,7 +33,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 88;
+      : plan tests    => 89;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -140,6 +140,9 @@ my $append_file_size;
     ok( defined $string, "returned string" );
 
     cmp_ok( length($string), '==', $size, "string matches server size" );
+
+    # dovecot may disconnect client if deleting selected folder
+    ok( $imap->select("INBOX"), "select INBOX" );
     ok( $imap->delete($target), "delete folder $target" );
 
     $append_file_size = $size;
