@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.36_01';
+our $VERSION = '3.36_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2880,7 +2880,7 @@ sub is_parent {
 sub selectable {
     my ( $self, $f ) = @_;
     my $info = $self->list( "", $f ) or return undef;
-    return not( grep /\b\\Noselect\b/i, @$info );
+    return not( grep /[\s(]\\Noselect[)\s]/i, @$info );
 }
 
 # append( $self, $folder, $text [, $optmsg] )

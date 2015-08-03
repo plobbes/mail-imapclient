@@ -5,7 +5,8 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.36_01: Sun, Aug  2, 2015 04:41:02 UTC
+version 3.36_02: Sun, Aug  2, 2015 04:41:02 UTC
+	- rt.cpan.org#91912: selectable broke in 3.29 due to \b around \NoSelect
 	- minor test cleanup
 
 version 3.35: Fri, Nov 22, 2013  2:18:41 PM

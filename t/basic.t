@@ -33,7 +33,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 89;
+      : plan tests    => 92;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -93,10 +93,8 @@ ok( defined $sep, "separator is '$sep'" );
 }
 
 my $ispar = $imap->is_parent('INBOX');
-my ( $target, $target2 ) =
-  $ispar
-  ? ( "INBOX${sep}IMAPClient_$$", "INBOX${sep}IMAPClient_2_$$" )
-  : ( "IMAPClient_$$", "IMAPClient_2_$$" );
+my $pre = $ispar ? "INBOX${sep}" : "";
+my ( $target, $target2 ) = ( "${pre}IMAPClient_$$", "${pre}IMAPClient_2_$$" );
 
 ok( defined $ispar, "INBOX is_parent '$ispar' (note: target '$target')" );
 
@@ -146,6 +144,15 @@ my $append_file_size;
     ok( $imap->delete($target), "delete folder $target" );
 
     $append_file_size = $size;
+}
+
+# rt.cpan.org#91912: selectable test for /NoSelect
+{
+    my $targetno = $target . "_noselect";
+    my $targetsubf = $targetno . "${sep}subfolder";
+    ok( $imap->create($targetsubf), "create target subfolder" );
+    ok( !$imap->selectable($targetno), "not selectable (non-mailbox w/inferior)" );
+    ok( $imap->delete($targetsubf), "delete target subfolder" );
 }
 
 ok( $imap->create($target), "create target" );
