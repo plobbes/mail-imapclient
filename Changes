@@ -5,9 +5,12 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.36_02: Sun, Aug  2, 2015 04:41:02 UTC
+version 3.36_03: Wed Aug 12 14:55:33 UTC 2015
+	- rt.cpan.org#105456: fetch_hash fails if sequence number contains '*'
+          [Gilles Lamiral]
 	- rt.cpan.org#91912: selectable broke in 3.29 due to \b around \NoSelect
-	- minor test cleanup
+          [Justin Vallon, Gilles Lamiral]
+	- some documentation, test cleanup and new tests
 
 version 3.35: Fri, Nov 22, 2013  2:18:41 PM
 	- *use Quote() over Massage() to avoid stripping double quotes from arg

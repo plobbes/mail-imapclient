@@ -33,7 +33,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 92;
+      : plan tests    => 100;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -169,6 +169,16 @@ SKIP: {
     my $d = " 1-Jan-2011 01:02:03 -0500";
     my $uid = $imap->append_string( $target, $testmsg, undef, $d );
     ok( defined $uid, "append test message to $target with date (uid=$uid)" );
+
+    # hash results do not have UID unless requested
+    my $h1 = $imap->fetch_hash( $uid, "RFC822.SIZE" );
+    is( ref($h1), "HASH", "fetch_hash($uid,RFC822.SIZE)" );
+    is( scalar keys %$h1, 1, "fetch_hash: fetched one msg (as requested)" );
+    is( !exists $h1->{$uid}->{UID}, 1, "fetch_hash: no UID (not requested)" );
+
+    $h1 = $imap->fetch_hash( $uid, "UID RFC822.SIZE" );
+    is( exists $h1->{$uid}->{UID}, 1, "fetch_hash: has UID (as requested)" );
+
     ok( $imap->delete_message($uid), "delete_message $uid" );
     ok( $imap->uidexpunge($uid),     "uidexpunge $uid" );
 
@@ -289,11 +299,29 @@ ok( $uid2, "copy $target2" );
 my @res = $imap->fetch( 1, "RFC822.TEXT" );
 ok( scalar @res, "fetch rfc822" );
 
-my $res1 = $imap->fetch_hash("RFC822.SIZE");
-is( ref($res1), "HASH", "fetch_hash(RFC822.SIZE)" );
+{
+    my $h1 = $imap->fetch_hash("RFC822.SIZE");
+    is( ref($h1), "HASH", "fetch_hash(RFC822.SIZE)" );
 
-my $res2 = $imap->fetch_hash( 1, "RFC822.SIZE" );
-is( ref($res2), "HASH", "fetch_hash(1,RFC822.SIZE)" );
+    my $id = ( sort { $a <=> $b } keys %$h1 )[0];
+    my $h2 = $imap->fetch_hash( $id, "RFC822.SIZE" );
+    is( ref($h2), "HASH", "fetch_hash($id,RFC822.SIZE)" );
+    is( scalar keys %$h2, 1, "fetch_hash($id,RFC822.SIZE) => fetched one msg" );
+}
+
+{
+    my $seq = "1:*";
+    my @dat = ( qw(RFC822.SIZE INTERNALDATE) );
+
+    my $h1 = $imap->fetch_hash( $seq, @dat );
+    is( ref($h1), "HASH", "fetch_hash($seq, " . join(", ", @dat) . ")" );
+
+    # verify legacy and less desirable use case still works
+    my $h2 = $imap->fetch_hash("$seq @dat");
+    is( ref($h2), "HASH", "fetch_hash('$seq @dat')" );
+
+    is_deeply( $h1, $h2, "fetch_hash same result with array or string args" );
+}
 
 my $h = $imap->parse_headers( 1, "Subject" );
 ok( $h, "got subject" );

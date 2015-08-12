@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.36_02';
+our $VERSION = '3.36_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1066,7 +1066,7 @@ sub body_string {
 
         last
           if $head =~
-              /(?:.*FETCH .*\(.*BODY\[TEXT\])|(?:^\d+ BAD )|(?:^\d NO )/i;
+          /(?:.*FETCH .*\(.*BODY\[TEXT\])|(?:^\d+ BAD )|(?:^\d NO )/i;
     }
 
     unless (@$ref) {
@@ -2140,15 +2140,15 @@ sub fetch_hash {
     # ALL let fetch turn that list of messages into a msgref as needed
     # fetch has similar logic for dealing with message list
     my $msgs = 'ALL';
-    if ( $words[0] ) {
+    if ( defined $words[0] ) {
         if ( ref $words[0] ) {
             $msgs = shift @words;
         }
-        elsif ( $#words > 0 ) {
+        else {
             if ( $words[0] eq 'ALL' ) {
                 $msgs = shift @words;
             }
-            elsif ( $words[0] =~ s/^([,:\d]+)\s*// ) {
+            elsif ( $words[0] =~ s/^([*,:\d]+)\s*// ) {
                 $msgs = $1;
                 shift @words if $words[0] eq "";
             }
@@ -2156,46 +2156,15 @@ sub fetch_hash {
     }
 
     # message list (if any) is now removed from @words
-    my $what = join( " ", @words );
+    my $what = "(" . join( " ", @words ) . ")";
 
     # RFC 3501:
     #   fetch = "FETCH" SP sequence-set SP ("ALL" / "FULL" / "FAST" /
     #           fetch-att / "(" fetch-att *(SP fetch-att) ")")
-    my %macro = (
-        "ALL"  => [qw(FLAGS INTERNALDATE RFC822.SIZE ENVELOPE)],
-        "FULL" => [qw(FLAGS INTERNALDATE RFC822.SIZE ENVELOPE BODY)],
-        "FAST" => [qw(FLAGS INTERNALDATE RFC822.SIZE)],
-    );
-
-    if ( $macro{$what} ) {
-        @words = @{ $macro{$what} };
-    }
-    else {
-        $what = "($what)";
-        my @twords;
-        foreach my $word (@words) {
-            $word = uc($word);
-
-            # server response to BODY[]<10.20> is a field named BODY[]<10>
-            if ( $word =~ /^BODY/ ) {
-                $word =~ s/<(\d+)\.\d+>$/<$1>/;
-
-                # server response to BODY.PEEK[] is a field named BODY[]
-                # BUG? allow for BODY.PEEK in response (historical behavior)
-                if ( $word =~ /^BODY\.PEEK/ ) {
-                    push( @twords, $word );
-                    $word =~ s/^BODY\.PEEK/BODY/;
-                }
-            }
-            unshift( @twords, $word );
-        }
-        @words = @twords;
-    }
-
-    my %words = map { $_ => 1 } @words;
-
     my $output = $self->fetch( $msgs, $what )
       or return undef;
+
+    my $asked_for_uid = $what =~ /[\s(]UID[)\s]/i;
 
     while ( my $l = shift @$output ) {
         next if $l !~ m/^\*\s(\d+)\sFETCH\s\(/g;
@@ -2259,17 +2228,14 @@ sub fetch_hash {
             }
         }
 
+        # NOTE: old code tried to remove any "unrequested" data in $entry
+        # - UID is sometimes not explicitly requested, are there others?
         if ( $self->Uid ) {
             $uids->{ $entry->{UID} } = $entry;
+            delete $entry->{UID} unless $asked_for_uid;
         }
         else {
             $uids->{$mid} = $entry;
-        }
-
-        # remove things not asked for (i.e. UID/$mid)
-        for my $word ( keys %$entry ) {
-            next if ( exists $words{$word} );
-            delete $entry->{$word};
         }
     }
 
