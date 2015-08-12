@@ -1547,12 +1547,12 @@ The value it returns is either:
 
 =over 4
 
-=item 1 (or a positive integer)
+=item C<1> (or a positive integer)
 
 The C<\HasChildren> attribute is set, indicating that the folder has
 children.
 
-=item 0
+=item C<0> (zero)
 
 The C<\HasNoChildren> attribute is set, indicating that the folder has
 no children at this time.
