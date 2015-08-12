@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.36_03';
+our $VERSION = '3.36_04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2814,20 +2814,21 @@ sub internaldate {
 }
 
 sub is_parent {
-    my ( $self, $folder ) = ( shift, shift );
+    my ( $self, $folder ) = @_;
     my $list = $self->list( undef, $folder ) or return undef;
 
     my $attrs;
     foreach my $resp (@$list) {
         my $rec = $self->_list_or_lsub_response_parse($resp);
         next unless defined $rec->{attrs};
-        return 0 if $rec->{attrs} =~ /\bNoInferior\b/i;
-        $attrs = $rec->{attrs};
+        $self->_debug("unexpected attrs data: @$list\n") if $attrs;
+        $attrs = $rec->{attrs}->[0];
     }
 
     if ($attrs) {
-        return 1 if $attrs =~ /HasChildren/i;
-        return 0 if $attrs =~ /HasNoChildren/i;
+        return undef if $attrs =~ /\\NoInferiors/i;
+        return 1     if $attrs =~ /\\HasChildren/i;
+        return 0     if $attrs =~ /\\HasNoChildren/i;
     }
     else {
         $self->_debug( join( "\n\t", "no attrs for '$folder' in:", @$list ) );

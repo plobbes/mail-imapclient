@@ -33,7 +33,7 @@ BEGIN {
 
     @missing
       ? plan skip_all => "missing value for: @missing"
-      : plan tests    => 100;
+      : plan tests    => 104;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -92,11 +92,13 @@ ok( defined $sep, "separator is '$sep'" );
     is( ref($lsub), "ARRAY", "lsub" );
 }
 
-my $ispar = $imap->is_parent('INBOX');
-my $pre = $ispar ? "INBOX${sep}" : "";
-my ( $target, $target2 ) = ( "${pre}IMAPClient_$$", "${pre}IMAPClient_2_$$" );
-
-ok( defined $ispar, "INBOX is_parent '$ispar' (note: target '$target')" );
+my ( $target, $target2 );
+{
+    my $ispar = $imap->is_parent('INBOX');
+    my $pre = $ispar ? "INBOX${sep}" : "";
+    ( $target, $target2 ) = ( "${pre}IMAPClient_$$", "${pre}IMAPClient_2_$$" );
+    ok( defined $ispar, "INBOX is_parent '$ispar' (note: target '$target')" );
+}
 
 ok( $imap->select('inbox'), "select inbox" );
 
@@ -104,10 +106,14 @@ ok( $imap->select('inbox'), "select inbox" );
 {
     my @f = $imap->folders();
     ok( @f, "folders" . ( $debug ? ":@f" : "" ) );
-    my @fh = $imap->folders_hash();
+    my @fh      = $imap->folders_hash();
     my @fh_keys = qw(attrs delim name);
     ok( @fh, "folders_hash keys: @fh_keys" );
-    ok( eq_set( ( [ keys %{ $fh[0] } ], [ @fh_keys ] ) ) );
+    is_deeply(
+        [ sort keys %{ $fh[0] } ],
+        [ sort @fh_keys ],
+        "folders eq folders_hash"
+      )
 }
 
 # test append_file
@@ -148,11 +154,13 @@ my $append_file_size;
 
 # rt.cpan.org#91912: selectable test for /NoSelect
 {
-    my $targetno = $target . "_noselect";
+    my $targetno   = $target . "_noselect";
     my $targetsubf = $targetno . "${sep}subfolder";
     ok( $imap->create($targetsubf), "create target subfolder" );
-    ok( !$imap->selectable($targetno), "not selectable (non-mailbox w/inferior)" );
+    ok( !$imap->selectable($targetno),
+        "not selectable (non-mailbox w/inferior)" );
     ok( $imap->delete($targetsubf), "delete target subfolder" );
+    ok( $imap->delete($targetno),   "delete parent folder" );
 }
 
 ok( $imap->create($target), "create target" );
@@ -228,8 +236,11 @@ ok( $imap->exists($target),  "exists $target" );
 ok( $imap->create($target2), "create $target2" );
 ok( $imap->exists($target2), "exists $target2" );
 
+is( defined $imap->is_parent($sep), 1, "is_parent($sep)" );
+is( !$imap->is_parent($target2),    1, "is_parent($target2)" );
+
 {
-    ok( $imap->subscribe($target), "subscribe target" );
+    ok( $imap->subscribe($target), "subscribe $target" );
 
     my $sub1 = $imap->subscribed();
     is( ( grep( /^\Q$target\E$/, @$sub1 ) )[0], "$target", "subscribed" );
@@ -240,29 +251,23 @@ ok( $imap->exists($target2), "exists $target2" );
     is( ( grep( /^\Q$target\E$/, @$sub2 ) )[0], undef, "unsubscribed" );
 }
 
-ok( $imap->select($target), "select $target" );
-
-my $fwquotes = qq($target${sep}has "quotes");
-if ( !$imap->is_parent($target) ) {
-    ok( 1, "not parent, skipping quote test 1/3" );
-    ok( 1, "not parent, skipping quote test 2/3" );
-    ok( 1, "not parent, skipping quote test 3/3" );
-}
-elsif ( $imap->create($fwquotes) ) {
-    ok( 1,                        "create $fwquotes" );
-    ok( $imap->select($fwquotes), 'select $fwquotes' );
-    ok( $imap->close,             'close $fwquotes' );
+my $fwquotes = qq($target has "quotes");
+if ( $imap->create($fwquotes) ) {
+    ok( 1,                        "create '$fwquotes'" );
+    ok( $imap->select($fwquotes), "select '$fwquotes'" );
+    ok( $imap->close,             "close  '$fwquotes'" );
     $imap->select('inbox');
-    ok( $imap->delete($fwquotes), 'delete $fwquotes' );
+    ok( $imap->delete($fwquotes), "delete '$fwquotes'" );
 }
 else {
-    if ( $imap->LastError =~ /NO Invalid.*name/ ) {
-        ok( 1, "$new_args{Server} doesn't support quotes in folder names" );
-    }
-    else { ok( 0, "failed creation with quotes" ) }
-    ok( 1, "skipping 1/2 tests" );
-    ok( 1, "skipping 2/2 tests" );
+    my $err = $imap->LastError || "(no error)";
+    ok( 1, "failed creation with quotes, assume not supported: $err" );
+    ok( 1, "skipping 1/3 tests" );
+    ok( 1, "skipping 2/3 tests" );
+    ok( 1, "skipping 3/3 tests" );
 }
+
+ok( $imap->select($target), "select $target" );
 
 my $fields = $imap->search( "HEADER", "Message-id", "NOT_A_MESSAGE_ID" );
 is( scalar @$fields, 0, 'bogus message id does not exist' );
@@ -311,10 +316,10 @@ ok( scalar @res, "fetch rfc822" );
 
 {
     my $seq = "1:*";
-    my @dat = ( qw(RFC822.SIZE INTERNALDATE) );
+    my @dat = (qw(RFC822.SIZE INTERNALDATE));
 
     my $h1 = $imap->fetch_hash( $seq, @dat );
-    is( ref($h1), "HASH", "fetch_hash($seq, " . join(", ", @dat) . ")" );
+    is( ref($h1), "HASH", "fetch_hash($seq, " . join( ", ", @dat ) . ")" );
 
     # verify legacy and less desirable use case still works
     my $h2 = $imap->fetch_hash("$seq @dat");

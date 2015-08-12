@@ -1543,9 +1543,26 @@ Example:
 
 The B<is_parent> method accepts one argument, the name of a folder. It
 returns a value that indicates whether or not the folder has children.
-The value it returns is either 1) a true value (indicating that the
-folder has children), 2) 0 if the folder has no children at this time,
-or 3) C<undef> if the folder is not permitted to have children.
+The value it returns is either:
+
+=over 4
+
+=item 1 (or a positive integer)
+
+The C<\HasChildren> attribute is set, indicating that the folder has
+children.
+
+=item 0
+
+The C<\HasNoChildren> attribute is set, indicating that the folder has
+no children at this time.
+
+=item C<undef>
+
+The C<\NoInferiors> attribute is set, indicating the folder is not
+permitted to have children.
+
+=back
 
 Eg:
 
@@ -1553,10 +1570,12 @@ Eg:
   if ( defined($parenthood) ) {
       if ($parenthood) {
           print "$folder has children.\n";
-      } else {
+      }
+      else {
           print "$folder is permitted children, but has none.\n";
       }
-  } else {
+  }
+  else {
       print "$folder is not permitted to have children.\n";
   }
 
