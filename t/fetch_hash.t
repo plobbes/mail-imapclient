@@ -122,27 +122,9 @@ my @tests = (
         { "1" => { "BODY[]<0>" => q{foo}, }, },
     ],
     [
-        "escaped ENVELOPE subject",
-        [
-q{* 1 FETCH (UID 1 X-SAVEDATE "28-Jan-2011 16:52:31 -0500" FLAGS (\Seen) ENVELOPE ("Fri, 28 Jan 2011 00:03:30 -0500"},
-            q{foo "bar\\" (baz\\)},
-q{ (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>")) }
-        ],
-        [ [1], qw(UID X-SAVEDATE FLAGS ENVELOPE) ],
-        {
-            "1" => {
-                'X-SAVEDATE' => '28-Jan-2011 16:52:31 -0500',
-                'UID'        => '1',
-                'FLAGS'      => '\\Seen',
-                'ENVELOPE' =>
-q{"Fri, 28 Jan 2011 00:03:30 -0500" "foo \\"bar\\\\\\" (baz\\\\)" (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>"}
-            },
-        },
-    ],
-    [
         "non-escaped BODY[HEADER.FIELDS (...)]",
         [
-q{* 1 FETCH (UID 1 FLAGS () BODY[HEADER.FIELDS (TO FROM SUBJECT DATE)]},
+q{* 1 FETCH (FLAGS () BODY[HEADER.FIELDS (TO FROM SUBJECT DATE)]},
             'From: Phil Pearl (Lobbes) <phil+from@perkpartners.com>
 To: phil+to@perkpartners.com
 Subject: foo "bar\" (baz\)
@@ -164,6 +146,33 @@ Date: Sat, 22 Jan 2011 20:43:58 -0500
             },
         },
     ],
+);
+
+my @uid_tests = (
+    [
+        "uid enabled",
+        [ q{* 1 FETCH (UID 123 UNQUOTED foobar)}, ],
+        [ [123], qw(UNQUOTED) ],
+        { "123" => { "UNQUOTED" => q{foobar}, } },
+    ],
+    [
+        "escaped ENVELOPE subject",
+        [
+q{* 1 FETCH (UID 1 X-SAVEDATE "28-Jan-2011 16:52:31 -0500" FLAGS (\Seen) ENVELOPE ("Fri, 28 Jan 2011 00:03:30 -0500"},
+            q{foo "bar\\" (baz\\)},
+q{ (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>")) }
+        ],
+        [ [1], qw(UID X-SAVEDATE FLAGS ENVELOPE) ],
+        {
+            "1" => {
+                'X-SAVEDATE' => '28-Jan-2011 16:52:31 -0500',
+                'UID'        => '1',
+                'FLAGS'      => '\\Seen',
+                'ENVELOPE' =>
+q{"Fri, 28 Jan 2011 00:03:30 -0500" "foo \\"bar\\\\\\" (baz\\\\)" (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) (("Phil Pearl" NIL "phil" "dom.loc")) ((NIL NIL "phil" "dom.loc")) NIL NIL NIL "<msgid>"}
+            },
+        },
+    ],
     [
         "real life example",
         [
@@ -176,11 +185,6 @@ Subject: test Tue, 15 Sep 2009 20:05:45 +1000
 ',
             ' BODY[]',
             'Return-Path: <rob@pyro>
-X-Spam-Checker-Version: SpamAssassin 3.2.5 (2008-06-10) on pyro.home
-X-Spam-Level: 
-X-Spam-Status: No, score=-0.5 required=5.0 tests=ALL_TRUSTED,BAYES_00,
-        FH_FROMEML_NOTLD,TO_MALFORMED autolearn=no version=3.2.5
-X-Original-To: rob@pyro
 Delivered-To: rob@pyro
 Received: from pyro (pyro [127.0.0.1])
         by pyro.home (Postfix) with ESMTP id A5C8115A066
@@ -191,7 +195,6 @@ From: rob@pyro
 Subject: test Tue, 15 Sep 2009 20:05:45 +1000
 X-Mailer: swaks v20061116.0 jetmore.org/john/code/#swaks
 Message-Id: <20090915100545.A5C8115A066@pyro.home>
-X-Bogosity: Spam, tests=bogofilter, spamicity=0.999693, version=1.2.1
 Lines: 1
 
 This is a test mailing
@@ -205,13 +208,8 @@ This is a test mailing
             qw(FLAGS INTERNALDATE RFC822.SIZE BODY[])
         ],
         {
-            "1" => {
+            "541" => {
                 'BODY[]' => 'Return-Path: <rob@pyro>
-X-Spam-Checker-Version: SpamAssassin 3.2.5 (2008-06-10) on pyro.home
-X-Spam-Level: 
-X-Spam-Status: No, score=-0.5 required=5.0 tests=ALL_TRUSTED,BAYES_00,
-        FH_FROMEML_NOTLD,TO_MALFORMED autolearn=no version=3.2.5
-X-Original-To: rob@pyro
 Delivered-To: rob@pyro
 Received: from pyro (pyro [127.0.0.1])
         by pyro.home (Postfix) with ESMTP id A5C8115A066
@@ -222,7 +220,6 @@ From: rob@pyro
 Subject: test Tue, 15 Sep 2009 20:05:45 +1000
 X-Mailer: swaks v20061116.0 jetmore.org/john/code/#swaks
 Message-Id: <20090915100545.A5C8115A066@pyro.home>
-X-Bogosity: Spam, tests=bogofilter, spamicity=0.999693, version=1.2.1
 Lines: 1
 
 This is a test mailing
@@ -236,18 +233,9 @@ From: rob@pyro
 Subject: test Tue, 15 Sep 2009 20:05:45 +1000
 
 ',
-                'RFC822.SIZE' => '771'
+                'RFC822.SIZE' => '771',
             },
         },
-    ],
-);
-
-my @uid_tests = (
-    [
-        "uid enabled",
-        [ q{* 1 FETCH (UID 123 UNQUOTED foobar)}, ],
-        [ [123], qw(UNQUOTED) ],
-        { "123" => { "UNQUOTED" => q{foobar}, } },
     ],
 );
 
@@ -278,10 +266,10 @@ sub run_tests {
     my ( $imap, $tests ) = @_;
 
     for my $test (@$tests) {
-        my ( $comment, $fetch, $request, $response ) = @$test;
+        my ( $comment, $fetch, $request, $expect ) = @$test;
         $imap->{_next_fetch_response} = $fetch;
         my $r = $imap->fetch_hash(@$request);
-        is_deeply( $r, $response, $comment );
+        is_deeply( $r, $expect, $comment );
     }
 }
 

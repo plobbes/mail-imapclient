@@ -7,9 +7,10 @@ Changes from 0.09    to 2.99_01 made by David Kernen
 
 version 3.36_03: Wed Aug 12 14:55:33 UTC 2015
 	- rt.cpan.org#105456: fetch_hash fails if sequence number contains '*'
-          [Gilles Lamiral]
+	  + *no longer removing unrequested data (except UID) in returned hashes
+	  [Gilles Lamiral]
 	- rt.cpan.org#91912: selectable broke in 3.29 due to \b around \NoSelect
-          [Justin Vallon, Gilles Lamiral]
+	  [Justin Vallon, Gilles Lamiral]
 	- some documentation, test cleanup and new tests
 
 version 3.35: Fri, Nov 22, 2013  2:18:41 PM
@@ -53,20 +54,20 @@ version 3.33: Tue, May 14, 2013 10:12:43 AM
 	  [Oleg G]
 	- *move()/copy() no longer sort message(s) provided by caller
 
-version 3.32: Fri, Aug 10, 2012  4:43:24 PM
+version 3.32: Fri, Aug 10, 2012	 4:43:24 PM
 	- document RFC2087 quota related calls
-          [Mathias Reitinger] documentation request
+	  [Mathias Reitinger] documentation request
 	- rt.cpan.org#78474: idle/idle_data documentation error
-          [Dima Kogan]
+	  [Dima Kogan]
 	- Quote()/Massage() now uses literals for non ascii data
-          [Mathias Reitinger] reported issues with utf8 data in password
+	  [Mathias Reitinger] reported issues with utf8 data in password
 	- use Quote()/Massage() consistently now in:
 	    login() proxyauth() deleteacl() setacl() listrights() rename()
 	- documented deleteacl() and other minor pod cleanup
 	- ran Mail::IMAPClient::BodyStructure through perltidy
 	- update year in README/pod to 2012
 	- rt.cpan.org#74733: Fails with Parse::RecDescent >= 1.966_002
-          rt.cpan.org#74593: Recent changes break Module::ExtractUse and ...
+	  rt.cpan.org#74593: Recent changes break Module::ExtractUse and ...
 	  [ANDK, TEAM, SREZIC, NBEBOUT at CPAN and nine from detonation]
 	  - Makefile.PL avoid buggy Parse::RecDescent 1.966_002 until 1.967_009
 	- rt.cpan.org#76989: Mail::IMAPClient::BodyStructure usage/docs
@@ -314,18 +315,18 @@ version 3.18_02: Wed May 27 10:02:24 EDT 2009
 	- *new attribute Ssl, when true causes IO::Socket::SSL to be
 	  used instead of IO::Socket::INET.  This change allows
 	  Reconnectretry logic to work on SSL connections too.
-        - have LastError cluck() if setting error to NO not connected
-        - handle errors from imap4rev1() in multiple places
-        - Reconnectretry/_imap_command enhancements/fixes
+	- have LastError cluck() if setting error to NO not connected
+	- handle errors from imap4rev1() in multiple places
+	- Reconnectretry/_imap_command enhancements/fixes
 	  + only run command if IsConnected
 	  + keep a temporary history of LastError(s)
 	  + sets LastError to NO not connected if ! IsConnected
 	  + retry =~ timeout|socket closed|* BYE| NO not connected
-        - _imap_command_do reduce data logged when using APPEND
-        - fetch() now handles messages() errors
-        - thread(), has_capability(), capability() better error checking
-        - authenticate() now uses _imap_command for retry mechanism
-        - size() now sets LastError when no RFC822.SIZE is found 
+	- _imap_command_do reduce data logged when using APPEND
+	- fetch() now handles messages() errors
+	- thread(), has_capability(), capability() better error checking
+	- authenticate() now uses _imap_command for retry mechanism
+	- size() now sets LastError when no RFC822.SIZE is found 
 
 version 3.18_01: Fri May 22 17:08:00 EDT 2009
 	- *update several methods to use common _get_response() method

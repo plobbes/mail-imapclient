@@ -1038,11 +1038,15 @@ Usage:
 
   $imap->fetch_hash( [$seq_set|ALL], @msg_data_items, [\%msg_by_ids] )
 
-Example:
+Examples:
+
+  my $hashref = $imap->fetch_hash("RFC822.SIZE");
+
+ OR
 
   my $hashref = {};
   $imap->fetch_hash( "RFC822.SIZE", $hashref );
-  print "Msg #$m is $hashref->{$m} bytes\n" foreach my $m (keys %$hashref);
+  print "Msg #$_ is $hashref->{$_}->{'RFC822.SIZE'} bytes\n" for (keys %$hashref);
 
 The B<fetch_hash> method accepts a list of message attributes to be
 fetched (as described in RFC3501).  It returns a hash whose keys are
@@ -1066,12 +1070,12 @@ and internal date for each of them, you could do the following:
   use Data::Dumper;
   # ... other code goes here
   $imap->select($folder);
-  my $hash = $imap->fetch_hash("RFC822.SIZE","INTERNALDATE");
+  my $hash = $imap->fetch_hash( "RFC822.SIZE", "INTERNALDATE" );
   # (Same as:
   #  my $hash = $imap->fetch_hash("RFC822.SIZE");
-  #  $imap->fetch_hash("INTERNALDATE",$hash);
+  #  $imap->fetch_hash( "INTERNALDATE", $hash );
   # ).
-  print Data::Dumper->Dumpxs([$hash],['$hash']);
+  print Data::Dumper->Dumpxs( [$hash], ['$hash'] );
 
 This would result in L<Data::Dumper> output similar to the following:
 
@@ -1139,9 +1143,9 @@ domination, you could do something like this:
   $flaghash = $imap->flags( scalar( $imap->search("ALL") ) );
 
   # pump through sorted hash keys to print results:
-  for my $k (sort { $flaghash->{$a} <=> $flaghash->{$b} } keys %$flaghash) {
+  for my $k ( sort { $flaghash->{$a} <=> $flaghash->{$b} } keys %$flaghash ) {
       # print: Message 1: \Flag1, \Flag2, \Flag3
-      print "Message $k:\t",join(", ",@{$flaghash->{$k}}),"\n";
+      print "Message $k:\t", join( ", ", @{$flaghash->{$k}} ), "\n";
   }
 
 =head2 folders
@@ -1160,13 +1164,13 @@ folders beginning with the prefix will be returned.
 
 For example:
 
-  print join(", ",$imap->folders),".\n";
+  print join( ", ", $imap->folders ), ".\n";
   # Prints:
   # INBOX, Sent, Projects, Projects/Completed, Projects/Ongoing, Projects Software.
-  print join(", ",$imap->folders("Projects"),".\n";
+  print join( ", ", $imap->folders("Projects") ), ".\n";
   # Prints:
   # Projects, Projects/Completed, Projects/Ongoing, Projects Software.
-  print join(", ",$imap->folders("Projects" . $imap->separator),".\n";
+  print join( ", ", $imap->folders("Projects" . $imap->separator) ), ".\n";
   # Prints:
   # Projects/Completed, Projects/Ongoing
 
@@ -1546,7 +1550,7 @@ or 3) C<undef> if the folder is not permitted to have children.
 Eg:
 
   my $parenthood = $imap->is_parent($folder);
-  if (defined($parenthood)) {
+  if ( defined($parenthood) ) {
       if ($parenthood) {
           print "$folder has children.\n";
       } else {
@@ -1580,7 +1584,7 @@ it.
 
 Example:
 
-  $imap->listrights($folder,$user)
+  $imap->listrights( $folder, $user )
     or die "Could not listrights: $@\n";
 
 The B<listrights> method implements the IMAP LISTRIGHTS client command
@@ -1620,7 +1624,7 @@ PROXYAUTH.
 
 Example:
 
-  $imap->login("admin", "password");
+  $imap->login( "admin", "password" );
   $imap->proxyauth("someuser");
 
 The B<proxyauth> method implements the IMAP PROXYAUTH client command.
@@ -1748,7 +1752,7 @@ I<Peek> is set to a true value.
 
 Example:
 
-  $imap->message_to_file($file,@msgs)
+  $imap->message_to_file( $file, @msgs )
     or die "Could not message_to_file: $@\n";
 
 The B<message_to_file> method accepts a filename or file handle and
