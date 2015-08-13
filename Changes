@@ -5,7 +5,9 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.36_04: Wed Aug 12 22:20:53 UTC 2015
+version 3.36_05: Wed Aug 12 22:20:53 UTC 2015
+	- rt.cpan.org#100601: login() fails if username requires use of literals
+	  [Andy Lyttle]
 	- *rt.cpan.org#103823: is_parent() should return undef on \NoInferiors
 	  [Gilles Lamiral]
 	- rt.cpan.org#105456: fetch_hash fails if sequence number contains '*'

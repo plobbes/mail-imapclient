@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.36_04';
+our $VERSION = '3.36_05';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -568,8 +568,17 @@ sub login {
 
         return undef unless ( defined($passwd) and defined($user) );
 
-        $user   = ( $user   eq "" ) ? qq("") : $self->Quote($user);
-        $passwd = ( $passwd eq "" ) ? qq("") : $self->Quote($passwd);
+        # if user is passed as a literal:
+        # 1. send passwd as a literal
+        # 2. empty literal passwd are sent as an blank line ($CRLF)
+        $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
+        if ( $user =~ /^{/ ) {
+            $passwd = $self->Quote( $passwd, 1 );  # force literal
+            $passwd .= $CRLF if ( $passwd eq "{0}$CRLF" ); # blank line
+        }
+        else {
+            $passwd = qq("") if ( $passwd eq "" );
+        }
 
         $self->_imap_command("LOGIN $user $passwd")
           or return undef;
@@ -3355,9 +3364,9 @@ sub quota_usage {
 #   CTL ::= <any ASCII control character and DEL, 0x00 - 0x1f, 0x7f>
 # Paranoia/safety:
 #   encode strings with "}" / "[" / "]" / non-ascii chars
-sub Quote($) {
-    my ( $self, $name ) = @_;
-    if ( $name =~ /["\\[:^ascii:][:cntrl:]]/s ) {
+sub Quote($;$) {
+    my ( $self, $name, $force ) = @_;
+    if ( $force or $name =~ /["\\[:^ascii:][:cntrl:]]/s ) {
         return "{" . length($name) . "}" . $CRLF . $name;
     }
     elsif ( $name =~ /[(){}\s%*\[\]]/s ) {
