@@ -240,7 +240,7 @@ Mail::IMAPClient::BodyStructure - parse fetched results
 
   foreach my $id (@recent) {
       my $bsdat = $imap->fetch( $id, "bodystructure" );
-      my $bso   = Mail::IMAPClient::BodyStructure->new($bsdat);
+      my $bso   = Mail::IMAPClient::BodyStructure->new( join("", $imap->History) );
       my $mime  = $bso->bodytype . "/" . $bso->bodysubtype;
       my $parts = map( "\n\t" . $_, $bso->parts );
       print "Msg $id (Content-type: $mime) contains these parts:$parts\n";
