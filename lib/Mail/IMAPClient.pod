@@ -1311,8 +1311,9 @@ Example:
   my $results = $imap->done($tag) or warn "Error from done: $@\n";
 
 The B<idle> method tells the IMAP server the client is ready to accept
-unsolicited mailbox update messages.  This method is only valid on
-servers that support the IMAP IDLE extension, see RFC2177 for details.
+unsolicited mailbox update messages (on the selected folder/mailbox).
+This method is only valid on servers that support the IMAP IDLE
+extension, see RFC2177 for details.
 
 The B<idle> method accepts no arguments and returns the I<tag>
 (identifier) that was sent by the client for this command.  This tag
