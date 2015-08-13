@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.36_06';
+our $VERSION = '3.36_07';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -115,7 +115,7 @@ sub LastError {
         $self->_debug( Carp::longmess("ERROR: $err") );
 
         # hopefully this is rare...
-        if ( $err eq "NO not connected" ) {
+        if ( $err =~ /NO not connected/ ) {
             my $lerr = $self->{LastError} || "";
             my $emsg = "Trying command when NOT connected!";
             $emsg .= " LastError was: $lerr" if $lerr;
@@ -1143,7 +1143,7 @@ sub idle_data {
               or return undef;
             $timeout = 0;    # check for more data without blocking!
         }
-    } while $ret > 0;
+    } while $ret > 0 and $self->IsConnected;
 
     # select returns -1 on errors
     return undef if $rc < 0;
@@ -1162,7 +1162,9 @@ sub idle_data {
 sub done {
     my $self = shift;
     my $count = shift || $self->Count;
-    $self->_imap_command( { addtag => 0, tag => $count }, "DONE" )
+
+    # DONE looks like a tag when sent and not already in IDLE
+    $self->_imap_command( { addtag => 0, tag => qr/(?:$count|DONE)/ }, "DONE" )
       or return undef;
     return $self->Results;
 }
@@ -1482,16 +1484,16 @@ sub _send_line {
     }
 
     # non-literal part continues...
-    unless ( $self->IsConnected ) {
-        $self->LastError("NO not connected");
-        return undef;
-    }
-
     if ( my $prew = $self->Prewritemethod ) {
         $string = $prew->( $self, $string );
     }
 
     $self->_debug("Sending: $string");
+    unless ( $self->IsConnected ) {
+        $self->LastError("NO not connected");
+        return undef;
+    }
+
     $self->_send_bytes( \$string );
 }
 
