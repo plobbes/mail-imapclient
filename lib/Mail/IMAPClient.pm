@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.36_05';
+our $VERSION = '3.36_06';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -573,8 +573,8 @@ sub login {
         # 2. empty literal passwd are sent as an blank line ($CRLF)
         $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
         if ( $user =~ /^{/ ) {
-            $passwd = $self->Quote( $passwd, 1 );  # force literal
-            $passwd .= $CRLF if ( $passwd eq "{0}$CRLF" ); # blank line
+            $passwd = $self->Quote( $passwd, 1 );    # force literal
+            $passwd .= $CRLF if ( $passwd eq "{0}$CRLF" );    # blank line
         }
         else {
             $passwd = qq("") if ( $passwd eq "" );
@@ -1476,8 +1476,8 @@ sub _send_line {
         $self->_debug("Sending literal: $first\tthen: $string");
         $self->_send_line($first) or return undef;
 
-        # look for "+..."
-        my $code = $self->_get_response('+') or return undef;
+        # look for "$tag NO" or "+ ..."
+        my $code = $self->_get_response( $self->Count, '+' ) or return undef;
         return undef unless $code eq '+';
     }
 
