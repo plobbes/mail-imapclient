@@ -5,7 +5,7 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.36_08: Thu Aug 13 19:09:17 UTC 2015
+version 3.36: Fri Aug 14 01:40:50 UTC 2015
 	- rt.cpan.org#96575: parsing fixes for fetch_hash and bodystructure
 	  + better handling of data containing escaped characters
 	  [Ken Neighbors]
