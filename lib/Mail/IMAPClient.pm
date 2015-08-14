@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.36';
+our $VERSION = '3.37';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2198,7 +2198,7 @@ sub fetch_hash {
                 $l             = shift @$output;
                 next ATTR;
             }
-            elsif ( $l =~ m/\G(?:"((?:\\?+.)*?)"|([^()\s]+))\s*/gc ) {
+            elsif ( $l=~  m/\G(?:"((?>(?:(?>[^"\\]+)|\\.)*))"|([^()\s]+))\s*/gc ) {
                 $value = defined $1 ? $1 : $2;
                 $entry->{$key} = $value;
                 next ATTR;
@@ -2206,7 +2206,7 @@ sub fetch_hash {
             elsif ( $l =~ m/\G\(/gc ) {
                 my $depth = 1;
                 $value = "";
-                while ( $l =~ m/\G("(?:\\?+.)*?"\s*|[()]|[^()"]+)/gc ) {
+                while ( $l =~ m/\G("((?>(?:(?>[^"\\]+)|\\.)*))"\s*|[()]|[^()"]+)/gc ) {
                     my $stuff = $1;
                     if ( $stuff eq "(" ) {
                         $depth++;
