@@ -2167,7 +2167,7 @@ sub fetch_hash {
     }
 
     # message list (if any) is now removed from @words
-    my $what = "(" . join( " ", @words ) . ")";
+    my $what = ( @words > 1 or $words[0] =~ /\s/ ) ? "(@words)" : "@words";
 
     # RFC 3501:
     #   fetch = "FETCH" SP sequence-set SP ("ALL" / "FULL" / "FAST" /
