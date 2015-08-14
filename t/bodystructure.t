@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 41;
+use Test::More tests => 49;
 
 BEGIN { use_ok('Mail::IMAPClient::BodyStructure') or exit; }
 
@@ -148,4 +148,25 @@ is_deeply( [ $bsobj->parts ], \@exp, 'bs9 parts' )
     # personalname mailboxname hostname sourcename
     my $to = $env->to_addresses;
     is_deeply( $to, [ '<phil+to@dom.loc>' ], "to_addresses" );
+}
+
+# envelope: parse_string with backslashes
+# date, subject, from, sender, reply-to, to, cc, bcc, in-reply-to, message-id
+{
+    my $str = q{("Thu, 19 Jun 2014 17:12:34 -0700" "subj" (("Ken N" NIL "ken+from" "dom.loc")) (("Ken N" NIL "ken+sender" "dom.loc")) () (("backslash\\\\" NIL "ken+to" "dom.loc")) NIL NIL NIL "<msgid>")};
+    my $env = Mail::IMAPClient::BodyStructure::Envelope->parse_string($str);
+    ok( defined $env, 'parsed envelope string with backslashes' );
+  SKIP: {
+      skip "ENVELOPE could not be parsed", 7 unless defined $env;
+      is( $env->subject, "subj", "subject" );
+      is( $env->inreplyto, "NIL", "inreplyto" );
+      is( $env->messageid, "<msgid>", "messageid" );
+      is( $env->bcc, "NIL", "bcc" );
+      is( $env->cc, "NIL", "cc" );
+      is( $env->replyto, "NIL", "replyto" );
+
+      # personalname mailboxname hostname sourcename
+      my $to = $env->to_addresses;
+      is_deeply( $to, [ 'backslash\\\\ <ken+to@dom.loc>' ], "to_addresses" );
+    }
 }

@@ -8,7 +8,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 22;
+use Test::More tests => 27;
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
 
@@ -24,6 +24,12 @@ my @tests = (
         [ q{* 1 FETCH (QUOTED "foo bar baz")}, ],
         [ [1], qw(QUOTED) ],
         { "1" => { "QUOTED" => q{foo bar baz}, }, },
+    ],
+     [
+        "escaped-backslash before end-quote",
+        [ q{* 1 FETCH (QUOTED "foo bar baz\\\\")}, ],
+        [ [1], qw(QUOTED) ],
+        { "1" => { "QUOTED" => q{foo bar baz\\\\}, }, },
     ],
     [
         "parenthesized value",
@@ -54,6 +60,24 @@ my @tests = (
         [ q{* 1 FETCH (PARENS (foo bar (baz)))}, ],
         [ [1], qw(PARENS) ],
         { "1" => { "PARENS" => q{foo bar (baz)}, }, },
+    ],
+    [
+        "parenthesized value with quoted parentheses",
+        [ q{* 1 FETCH (PARENS (foo "(bar)" baz))}, ],
+        [ [1], qw(PARENS) ],
+        { "1" => { "PARENS" => q{foo "(bar)" baz}, }, },
+    ],
+    [
+        "parenthesized value with quoted unclosed parentheses",
+        [ q{* 1 FETCH (PARENS (foo "(bar" baz))}, ],
+        [ [1], qw(PARENS) ],
+        { "1" => { "PARENS" => q{foo "(bar" baz}, }, },
+    ],
+    [
+        "parenthesized value with quoted unopened parentheses",
+        [ q{* 1 FETCH (PARENS (foo "bar)" baz))}, ],
+        [ [1], qw(PARENS) ],
+        { "1" => { "PARENS" => q{foo "bar)" baz}, }, },
     ],
     [
         "complex parens",
@@ -154,6 +178,19 @@ my @uid_tests = (
         [ q{* 1 FETCH (UID 123 UNQUOTED foobar)}, ],
         [ [123], qw(UNQUOTED) ],
         { "123" => { "UNQUOTED" => q{foobar}, } },
+    ],
+    [
+        "ENVELOPE with escaped-backslash before end-quote",
+        [ q{* 1 FETCH (UID 1 FLAGS (\Seen) ENVELOPE ("Fri, 28 Jan 2011 00:03:30 -0500" "Subject" (("Ken N" NIL "ken" "dom.loc")) (("Ken N" NIL "ken" "dom.loc")) (("Ken N" NIL "ken" "dom.loc")) (("Ken Backslash\\\\" NIL "ken.bl" "dom.loc")) NIL NIL NIL "<msgid>")) } ],
+        [ [1], qw(UID FLAGS ENVELOPE) ],
+        {
+            "1" => {
+                'UID'        => '1',
+                'FLAGS'      => '\\Seen',
+                'ENVELOPE' =>
+q{"Fri, 28 Jan 2011 00:03:30 -0500" "Subject" (("Ken N" NIL "ken" "dom.loc")) (("Ken N" NIL "ken" "dom.loc")) (("Ken N" NIL "ken" "dom.loc")) (("Ken Backslash\\\\" NIL "ken.bl" "dom.loc")) NIL NIL NIL "<msgid>"}
+            },
+        },
     ],
     [
         "escaped ENVELOPE subject",

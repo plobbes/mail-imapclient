@@ -37,8 +37,8 @@ NUMBER:		/^(\d+)/		{ $return = $item[1] }
 
 # Strings:
 
-SINGLE_QUOTED_STRING: "'" /(?:\\'|[^'])*/ "'" { $return = $item{__PATTERN1__} }
-DOUBLE_QUOTED_STRING: '"' /(?:\\"|[^"])*/ '"' { $return = $item{__PATTERN1__} }
+SINGLE_QUOTED_STRING: "'" /(?:\\['\\]|[^'])*/ "'" { $return = $item{__PATTERN1__} }
+DOUBLE_QUOTED_STRING: '"' /(?:\\["\\]|[^"])*/ '"' { $return = $item{__PATTERN1__} }
 
 BARESTRING:	...!/^[)('"]/	/^(?!\(|\))(?:\\ |\S)+/
 	{ $return = $item{__PATTERN1__} }
