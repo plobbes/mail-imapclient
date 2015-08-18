@@ -190,6 +190,17 @@ SKIP: {
     ok( $imap->delete_message($uid), "delete_message $uid" );
     ok( $imap->uidexpunge($uid),     "uidexpunge $uid" );
 
+=begin comment
+
+    my $ol = $imap->Maxcommandlength();
+    $imap->Maxcommandlength(64);
+    my $exp = $imap->uidexpunge($uid . "," . join(",", map{$_*2} 2..40) );
+    $imap->Maxcommandlength($ol);
+    is( $exp->[0], $imap->Count . " UID EXPUNGE $uid", "UID EXPUNGE $uid" );
+    is( grep( /^\* $uid EXPUNGE/, @$exp ), !undef, "found EXPUNGE response" );
+
+=cut
+
     # multiple args joined internally in append()
     $uid = $imap->append( $target, $testmsg, "Some extra text too" );
     ok( defined $uid, "append test message to $target with date (uid=$uid)" );

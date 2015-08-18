@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.37';
+our $VERSION = '3.38_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2198,7 +2198,9 @@ sub fetch_hash {
                 $l             = shift @$output;
                 next ATTR;
             }
-            elsif ( $l=~  m/\G(?:"((?>(?:(?>[^"\\]+)|\\.)*))"|([^()\s]+))\s*/gc ) {
+            elsif (
+                $l =~ m/\G(?:"((?>(?:(?>[^"\\]+)|\\.)*))"|([^()\s]+))\s*/gc )
+            {
                 $value = defined $1 ? $1 : $2;
                 $entry->{$key} = $value;
                 next ATTR;
@@ -2206,7 +2208,9 @@ sub fetch_hash {
             elsif ( $l =~ m/\G\(/gc ) {
                 my $depth = 1;
                 $value = "";
-                while ( $l =~ m/\G("((?>(?:(?>[^"\\]+)|\\.)*))"\s*|[()]|[^()"]+)/gc ) {
+                while ( $l =~
+                    m/\G("((?>(?:(?>[^"\\]+)|\\.)*))"\s*|[()]|[^()"]+)/gc )
+                {
                     my $stuff = $1;
                     if ( $stuff eq "(" ) {
                         $depth++;
@@ -2317,6 +2321,10 @@ sub uidexpunge {
     my ( $self, $msgspec ) = ( shift, shift );
 
     return undef unless $self->has_capability("UIDPLUS");
+    unless ( $self->Uid ) {
+        $self->LastError("Uid must be enabled for uidexpunge");
+        return undef;
+    }
 
     my $msg =
       UNIVERSAL::isa( $msgspec, 'Mail::IMAPClient::MessageSet' )
@@ -2325,16 +2333,28 @@ sub uidexpunge {
 
     $msg->cat(@_) if @_;
 
-    if ( $self->Uid ) {
-        $self->_imap_command("UID EXPUNGE $msg")
+    my ( @data, $cmd );
+    my ($seq_set) = $self->_split_sequence( $msg, "UID EXPUNGE" );
+
+    for ( my $x = 0 ; $x <= $#$seq_set ; $x++ ) {
+        my $seq = $seq_set->[$x];
+        $self->_imap_uid_command( "EXPUNGE" => $seq )
           or return undef;
-    }
-    else {
-        $self->LastError("Uid must be enabled for uidexpunge");
-        return undef;
+        my $res = $self->Results;
+
+        # only keep last command and last response (* OK ...)
+        $cmd = shift(@$res);
+        pop(@$res) if ( $x != $#{$seq_set} );
+        push( @data, @$res );
     }
 
-    return wantarray ? $self->History : $self->Results;
+    if ( $cmd and !wantarray ) {
+        $cmd =~ s/^(\d+\s+.*?EXPUNGE\s+)\S+(\s*)/$1$msg$2/;
+        unshift( @data, $cmd );
+    }
+
+    #wantarray ? $self->History : $self->Results;
+    return wantarray ? @data : \@data;
 }
 
 sub rename {
