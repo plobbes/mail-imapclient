@@ -113,7 +113,7 @@ ok( $imap->select('inbox'), "select inbox" );
         [ sort keys %{ $fh[0] } ],
         [ sort @fh_keys ],
         "folders eq folders_hash"
-      )
+      );
 }
 
 # test append_file
