@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.38_03';
+our $VERSION = '3.38_04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -765,7 +765,7 @@ sub subscribed {
 sub deleteacl {
     my ( $self, $target, $user ) = @_;
     $target = $self->Quote($target);
-    $user = $self->Quote($user);
+    $user   = $self->Quote($user);
 
     $self->_imap_command(qq(DELETEACL $target $user))
       or return undef;
@@ -1466,6 +1466,13 @@ sub _record {
     push @{ $self->{History}{$count} }, $array;
 }
 
+# try to avoid exposing auth info via debug unless Showcredentials is true
+sub _redact_line {
+    my ( $self, $string ) = @_;
+    my $show = $self->Showcredentials and return undef;
+    return sprintf( "[Redact: Count=%s Showcredentials=OFF]", $self->Count );
+}
+
 # _send_line handles literal data and supports the Prewritemethod
 sub _send_line {
     my ( $self, $string, $suppress ) = @_;
@@ -1476,7 +1483,13 @@ sub _send_line {
     # handle case where string contains a literal
     if ( $string =~ s/^([^$LF\{]*\{\d+\}$CRLF)(?=.)//o ) {
         my $first = $1;
-        $self->_debug("Sending literal: $first\tthen: $string");
+        if ( $self->Debug ) {
+            my $dat =
+              ( $self->IsConnected and !$self->IsAuthenticated )
+              ? $self->_redact_line($string)
+              : undef;
+            $self->_debug( "Sending literal: $first\tthen: ", $dat || $string );
+        }
         $self->_send_line($first) or return undef;
 
         # look for "$tag NO" or "+ ..."
@@ -1489,7 +1502,14 @@ sub _send_line {
         $string = $prew->( $self, $string );
     }
 
-    $self->_debug("Sending: $string");
+    if ( $self->Debug ) {
+        my $dat =
+          ( $self->IsConnected and !$self->IsAuthenticated )
+          ? $self->_redact_line($string)
+          : undef;
+        $self->_debug( "Sending: ", $dat || $string );
+    }
+
     unless ( $self->IsConnected ) {
         $self->LastError("NO not connected");
         return undef;
