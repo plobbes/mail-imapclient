@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.38_02';
+our $VERSION = '3.38_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -571,13 +571,14 @@ sub login {
         # if user is passed as a literal:
         # 1. send passwd as a literal
         # 2. empty literal passwd are sent as an blank line ($CRLF)
-        $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
+        $user = $self->Quote($user);
         if ( $user =~ /^{/ ) {
+            my $nopasswd = ( $passwd eq "" ) ? 1 : 0;
             $passwd = $self->Quote( $passwd, 1 );    # force literal
-            $passwd .= $CRLF if ( $passwd eq "{0}$CRLF" );    # blank line
+            $passwd .= $CRLF if ($nopasswd);         # blank line
         }
         else {
-            $passwd = qq("") if ( $passwd eq "" );
+            $passwd = $self->Quote($passwd);
         }
 
         $self->_imap_command("LOGIN $user $passwd")
@@ -598,7 +599,7 @@ sub noop {
 
 sub proxyauth {
     my ( $self, $user ) = @_;
-    $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
+    $user = $self->Quote($user);
     $self->_imap_command("PROXYAUTH $user") ? $self->Results : undef;
 }
 
@@ -764,7 +765,7 @@ sub subscribed {
 sub deleteacl {
     my ( $self, $target, $user ) = @_;
     $target = $self->Quote($target);
-    $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
+    $user = $self->Quote($user);
 
     $self->_imap_command(qq(DELETEACL $target $user))
       or return undef;
@@ -778,8 +779,8 @@ sub setacl {
     $target = $self->Quote($target);
 
     $user ||= $self->User;
-    $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
-    $acl  = ( $acl  eq "" ) ? qq("") : $self->Quote($acl);
+    $user = $self->Quote($user);
+    $acl  = $self->Quote($acl);
 
     $self->_imap_command(qq(SETACL $target $user $acl))
       or return undef;
@@ -823,7 +824,7 @@ sub listrights {
     $target = $self->Quote($target);
 
     $user ||= $self->User;
-    $user = ( $user eq "" ) ? qq("") : $self->Quote($user);
+    $user = $self->Quote($user);
 
     $self->_imap_command(qq(LISTRIGHTS $target $user))
       or return undef;
@@ -2360,8 +2361,8 @@ sub uidexpunge {
 sub rename {
     my ( $self, $from, $to ) = @_;
 
-    $from = ( $from eq "" ) ? qq("") : $self->Quote($from);
-    $to   = ( $to   eq "" ) ? qq("") : $self->Quote($to);
+    $from = $self->Quote($from);
+    $to   = $self->Quote($to);
 
     $self->_imap_command(qq(RENAME $from $to)) ? $self : undef;
 }
@@ -3338,21 +3339,21 @@ sub size {
 
 sub getquotaroot {
     my ( $self, $what ) = @_;
-    my $who = $what ? $self->Quote($what) : "INBOX";
+    my $who = defined $what ? $self->Quote($what) : "INBOX";
     return $self->_imap_command("GETQUOTAROOT $who") ? $self->Results : undef;
 }
 
 # BUG? using user/$User here and INBOX in quota/quota_usage
 sub getquota {
     my ( $self, $what ) = @_;
-    my $who = $what ? $self->Quote($what) : "user/" . $self->User;
+    my $who = defined $what ? $self->Quote($what) : "user/" . $self->User;
     return $self->_imap_command("GETQUOTA $who") ? $self->Results : undef;
 }
 
 # usage: $self->setquota($quotaroot, storage => 512, ...)
 sub setquota(@) {
     my ( $self, $what ) = ( shift, shift );
-    my $who = $what ? $self->Quote($what) : "user/" . $self->User;
+    my $who = defined $what ? $self->Quote($what) : "user/" . $self->User;
     my @limits;
     while (@_) {
         my ( $k, $v ) = ( $self->Quote( uc( shift @_ ) ), shift @_ );
@@ -3391,7 +3392,7 @@ sub Quote($;$) {
     if ( $force or $name =~ /["\\[:^ascii:][:cntrl:]]/s ) {
         return "{" . length($name) . "}" . $CRLF . $name;
     }
-    elsif ( $name =~ /[(){}\s%*\[\]]/s ) {
+    elsif ( $name =~ /[(){}\s%*\[\]]/s or $name eq "" ) {
         return qq("$name");
     }
     else {
