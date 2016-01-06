@@ -1469,8 +1469,39 @@ sub _record {
 # try to avoid exposing auth info via debug unless Showcredentials is true
 sub _redact_line {
     my ( $self, $string ) = @_;
-    my $show = $self->Showcredentials and return undef;
-    return sprintf( "[Redact: Count=%s Showcredentials=OFF]", $self->Count );
+    $self->Showcredentials and return undef;
+
+    my ( $tag, $cmd ) = ( $self->Count, undef );
+    my $retext = "[Redact: Count=$tag Showcredentials=OFF]";
+    my $show   = $retext;
+
+    # tagged command?
+    if ( $string =~ s/^($tag\s+(\S+)\s+)// ) {
+        ( $show, $cmd ) = ( $1, $2 );
+
+        # login <username|literal> <password|literal>
+        if ( $cmd =~ /login/i ) {
+
+            # username as literal
+            if ( $string =~ /^{/ ) {
+                $show .= $string;
+            }
+
+            # username (possibly quoted) string, then literal? password
+            elsif ( $string =~ s/^((?:"(?>(?:(?>[^"\\]+)|\\.)*)"|\S+)\s*)// ) {
+                $show .= $1;
+                $show .= ( $string =~ /^{/ ) ? $string : $retext;
+            }
+        }
+        elsif ( $cmd =~ /^auth/i ) {
+            $show .= $string;
+        }
+        else {
+            return undef;    # show it all
+        }
+    }
+
+    return $show;
 }
 
 # _send_line handles literal data and supports the Prewritemethod
