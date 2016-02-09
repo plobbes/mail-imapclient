@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.38_04';
+our $VERSION = '3.38';
 
 use Mail::IMAPClient::MessageSet;
 
