@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.38';
+our $VERSION = '3.39_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -1165,7 +1165,8 @@ sub done {
     my $count = shift || $self->Count;
 
     # DONE looks like a tag when sent and not already in IDLE
-    $self->_imap_command( { addtag => 0, tag => qr/(?:$count|DONE)/ }, "DONE" )
+    $self->_imap_command(
+        { addtag => 0, tag => qr/(?:$count|DONE)/, doretry => 0 }, "DONE" )
       or return undef;
     return $self->Results;
 }
@@ -1211,8 +1212,11 @@ sub reconnect {
 }
 
 # wrapper for _imap_command_do to enable retrying on lost connections
+# options:
+#   doretry => 0|1 - suppress|allow retry after reconnect
 sub _imap_command {
     my $self = shift;
+    my $opt = ref( $_[0] ) eq "HASH" ? $_[0] : {};
 
     my $tries = 0;
     my $retry = $self->Reconnectretry || 0;
@@ -1241,6 +1245,7 @@ sub _imap_command {
             my $ret = $self->reconnect;
             if ($ret) {
                 $self->_debug("reconnect success($ret) on try #$tries/$retry");
+                last if exists $opt->{doretry} and !$opt->{doretry};
             }
             elsif ( defined $ret and $ret == 0 ) {    # escaping recursion
                 return undef;
