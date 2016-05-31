@@ -2116,9 +2116,24 @@ the IMAP client command "STATUS folder RECENT"), or C<undef> in the
 case of an error.  The B<recent_count> method was contributed by Rob
 Deker (deker@ikimbo.com).
 
+=head2 noop
+
+Example:
+
+  $imap->noop or die "noop failed: $@\n";
+
+The B<noop> method performs an IMAP NOOP command.  Per RFC3501 this
+command does nothing and always succeeds.  However, if a connection
+times out or other errors occur while communicating with the server,
+this method can still fail.  This command can be used as a periodic
+poll to check for (untagged) status updates (new messages, etc.) from
+the server and also to reset any inactivity/auto-logout timers the
+server may maintain.
+
 =head2 reconnect
 
 Example:
+
   $imap->noop or $imap->reconnect or die "noop failed: $@\n";
 
 Attempt to reconnect if the IMAP connection unless $imap is already in
