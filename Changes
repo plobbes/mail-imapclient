@@ -13,6 +13,7 @@ version 3.39_03: Wed Feb  1 22:20:21 UTC 2017
 	- rt.cpan.org#97718: (redux) never retry DONE
 	  [Laurence Darby]
 	- _imap_command() new doretry => 0|1 option to suppress/allow retry
+	- updated copyright for 2017
 
 version 3.38: Tue Feb  9 02:48:21 UTC 2016
 	- rt.cpan.org#107592: redact credentials via debug if !Showcredentials
