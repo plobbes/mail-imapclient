@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.39_02';
+our $VERSION = '3.39_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -366,7 +366,11 @@ sub connect(@) {
         return $self->Socket($sock);
     }
     else {
-        my $lasterr = $self->LastError || "";
+        my $lasterr = $self->LastError;
+        if ( !$lasterr and $self->Ssl and $ioclass ) {
+            $lasterr = $ioclass->errstr;
+        }
+        $lasterr ||= "";
         $self->LastError("Unable to connect to $server: $lasterr");
         return undef;
     }
