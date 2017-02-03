@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.39_03';
+our $VERSION = '3.39';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2306,9 +2306,15 @@ sub fetch_hash {
 
         # NOTE: old code tried to remove any "unrequested" data in $entry
         # - UID is sometimes not explicitly requested, are there others?
+        # - rt#115726: Uid and $entry->{UID} not set, ignore unsolicited data
         if ( $self->Uid ) {
-            $uids->{ $entry->{UID} } = $entry;
-            delete $entry->{UID} unless $asked_for_uid;
+            if ( $entry->{UID} ) {
+                $uids->{ $entry->{UID} } = $entry;
+                delete $entry->{UID} unless $asked_for_uid;
+            }
+            else {
+                $self->_debug("ignoring unsolicited response: $l");
+            }
         }
         else {
             $uids->{$mid} = $entry;
