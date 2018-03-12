@@ -104,8 +104,9 @@ sub seconds {
                 (\d\d)          # minute                #
                 !x;
 
+    # allow year 0999 to be year 999, and year 0099 to be year 99
     return timegm( 0, $min, $hr, $dom, $moy - 1,
-        ( $yy > 99 ? $yy - 1900 : $yy ) );
+        ( $yy > 999 ? $yy : $yy - 1900 ) );
 }
 
 sub sendmail {
