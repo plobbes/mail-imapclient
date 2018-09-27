@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.39';
+our $VERSION = '3.40_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2479,13 +2479,13 @@ sub flags {
         }
     }
 
-    # Or did he want a hash from msgid to flag array?
+    # Return a hash from msgid to flag array?
     return $flagset
       if ref $msgspec;
 
-    # or did the guy want just one response? Return it if so
+    # Or, just one response? Return it if so
     my $flagsref = $flagset->{$msgspec};
-    return wantarray ? @$flagsref : $flagsref;
+    return wantarray ? @{ $flagsref || [] } : $flagsref;
 }
 
 # reduce a list, stripping undeclared flags. Flags with or without

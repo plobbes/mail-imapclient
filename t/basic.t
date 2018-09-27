@@ -14,7 +14,7 @@ BEGIN {
     eval { $params = MyTest->new; };
     $@
       ? plan skip_all => $@
-      : plan tests    => 104;
+      : plan tests    => 106;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -449,6 +449,14 @@ else {
       if $imap->message_count;
     $imap->close;
     $imap->delete($target);
+}
+
+{
+    $imap->select('inbox');
+    my $bogusf = $imap->flags(42);
+    is( $bogusf, undef, '(scalar) flags returns undef for bogus message' );
+    my @bogusf = $imap->flags(42);
+    is( "@bogusf", "", '(list) flags returns empty () for bogus message' );
 }
 
 $imap->_disconnect;
