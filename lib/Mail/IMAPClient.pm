@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.40_01';
+our $VERSION = '3.40_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -47,6 +47,7 @@ my %SEARCH_KEYS = map { ( $_ => 1 ) } qw(
 my %Load_Module = (
     "Compress-Zlib" => "Compress::Zlib",
     "INET"          => "IO::Socket::INET",
+    "IP"            => "IO::Socket::IP",
     "SSL"           => "IO::Socket::SSL",
     "UNIX"          => "IO::Socket::UNIX",
     "BodyStructure" => "Mail::IMAPClient::BodyStructure",
@@ -346,13 +347,14 @@ sub connect(@) {
             Proto    => "tcp",
         );
 
-        # extra control of SSL args is supported
+        # pass SSL args if requested; default to IO::Socket::(IP|INET)
         if ( $self->Ssl ) {
             $ioclass = $self->_load_module("SSL");
             push( @sockargs, @{ $self->Ssl } ) if ref $self->Ssl eq "ARRAY";
         }
         else {
-            $ioclass = $self->_load_module("INET");
+            $ioclass = $self->_load_module("IP");
+            $ioclass = $self->_load_module("INET") unless $ioclass;
         }
     }
 

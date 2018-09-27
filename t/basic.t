@@ -14,7 +14,7 @@ BEGIN {
     eval { $params = MyTest->new; };
     $@
       ? plan skip_all => $@
-      : plan tests    => 106;
+      : plan tests    => 107;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -44,6 +44,11 @@ $imap
   . "Are server/user/password correct?\n";
 
 isa_ok( $imap, 'Mail::IMAPClient' );
+
+{
+    my $type = ref $imap->Socket;
+    ok( $type =~ /^IO::Socket::.*/, "Socket ref is $type" );
+}
 
 $imap->Debug_fh->autoflush() if $imap->Debug_fh;
 
