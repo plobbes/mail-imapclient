@@ -461,7 +461,7 @@ else {
     my $bogusf = $imap->flags(42);
     is( $bogusf, undef, '(scalar) flags returns undef for bogus message' );
     my @bogusf = $imap->flags(42);
-    is( "@bogusf", "", '(list) flags returns empty () for bogus message' );
+    is( $bogusf[0], undef, '(list) flags returns array with undef element 0 for bogus message' );
 }
 
 $imap->_disconnect;
