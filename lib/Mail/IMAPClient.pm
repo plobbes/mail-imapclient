@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.40';
+our $VERSION = '3.41_01';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -717,6 +717,7 @@ sub _folders_or_subscribed {
             foreach my $resp (@list) {
                 my $rec = $self->_list_or_lsub_response_parse($resp);
                 next unless defined $rec->{name};
+                next if first { lc($_) eq '\noselect' } @{ $rec->{attrs} };
                 push @folders, $rec;
             }
         }
@@ -2248,6 +2249,11 @@ sub fetch_hash {
         while ( $l and $l !~ m/\G\s*\)\s*$/gc ) {
             if ( $l =~ m/\G\s*([^\s\[]+(?:\[[^\]]*\])?(?:<[^>]*>)?)\s*/gc ) {
                 $key = uc($1);
+
+                # strip quotes around header names - seen w/outlook.com
+                if ( $key =~ /^BODY\[HEADER\.FIELDS \("[^"]+".*?\)\]$/ ) {
+                    $key =~ s/"//g;
+                }
             }
             elsif ( !defined $key ) {
 
@@ -2926,9 +2932,9 @@ sub is_parent {
     }
 
     if ($attrs) {
-        return undef if grep { /\A\\NoInferiors\Z/i } @$attrs;
-        return 1     if grep { /\A\\HasChildren\Z/i } @$attrs;
-        return 0     if grep { /\A\\HasNoChildren\Z/i } @$attrs;
+        return undef if first { lc($_) eq '\noinferiors' } @$attrs;
+        return 1     if first { lc($_) eq '\haschildren' } @$attrs;
+        return 0     if first { lc($_) eq '\hasnochildren' } @$attrs;
     }
     else {
         $self->_debug( join( "\n\t", "no attrs for '$folder' in:", @$list ) );

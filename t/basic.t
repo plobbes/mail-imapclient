@@ -14,7 +14,7 @@ BEGIN {
     eval { $params = MyTest->new; };
     $@
       ? plan skip_all => $@
-      : plan tests    => 107;
+      : plan tests    => 108;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -141,6 +141,9 @@ my $append_file_size;
     my $targetno   = $target . "_noselect";
     my $targetsubf = $targetno . "${sep}subfolder";
     ok( $imap->create($targetsubf), "create target subfolder" );
+    my @f = $imap->folders();
+    ok( (!grep { $_ eq $targetno } @f), "folders() excludes /Noselect mailbox" )
+	or diag("folders() included $targetno");
     ok( !$imap->selectable($targetno),
         "not selectable (non-mailbox w/inferior)" );
     ok( $imap->delete($targetsubf), "delete target subfolder" );
