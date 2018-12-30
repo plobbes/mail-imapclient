@@ -5,7 +5,9 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.41_01: Thu Dec 27 05:37:31 UTC 2018
+version 3.41_01: Sun Dec 30 00:51:59 EST 2018
+	- rt.cpan.org#128127: fix minor POD typo for search()
+	  [Gregor Herrmann]
 	- folders()/subscribed() remove mailboxes with \Noselect attribute
 	  [Ashley Willis]
 	- fetch_hash() remove quotes around header names (seen w/outlook.com)
@@ -13,11 +15,11 @@ version 3.41_01: Thu Dec 27 05:37:31 UTC 2018
 	- use first over grep for minor efficiency gains
 
 version 3.40: Thu Dec  6 01:44:16 UTC 2018
-	- rt.cpan.org#122373 support IPv6 by using IO::Socket::IP over IO::Socket::INET
+	- rt.cpan.org#122373: support IPv6 by using IO::Socket::IP over IO::Socket::INET
 	  [Gilles Lamiral and Mark Overmeer]
-	- rt.cpan.org#127103 flags() undef value as an ARRAY reference on a bogus message
+	- rt.cpan.org#127103: flags() undef value as an ARRAY reference on a bogus message
 	  [Gilles Lamiral]
-	- rt.cpan.org#124523 update examples/populate_mailbox.pl timegm usage
+	- rt.cpan.org#124523: update examples/populate_mailbox.pl timegm usage
 	  [Bernhard M. W.]
 	- t/capability.t: added first set of tests
 	- t/quota.t: minor fix when tests skipped

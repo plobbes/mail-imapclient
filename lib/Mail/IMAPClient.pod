@@ -2253,7 +2253,7 @@ tags then see L</"tag_and_run">, below.
 Example:
 
   my $msgs1 = $imap->search(@args);
-  if ($msgs) {
+  if ($msgs1) {
       print "search matches: @$msgs1";
   }
   else {
