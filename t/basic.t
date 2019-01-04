@@ -14,7 +14,7 @@ BEGIN {
     eval { $params = MyTest->new; };
     $@
       ? plan skip_all => $@
-      : plan tests    => 108;
+      : plan tests    => 110;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -28,6 +28,16 @@ my %new_args = (
     Uid           => $uidplus,
     Debug         => $debug,
 );
+
+{
+    my $ret;
+    eval {
+	my $imap = Mail::IMAPClient->new();
+	$ret = $imap->connect();
+    };
+    ok( !$@, "allow no args to connect()" ) or diag( '$@:' . $@ );
+    ok( !defined $ret, "connect() returns undef" ) or diag("returned($ret)");
+}
 
 # allow other options to be placed in test.txt
 %new_args = ( %new_args, %${params} );

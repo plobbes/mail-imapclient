@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.41_01';
+our $VERSION = '3.41_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -331,7 +331,8 @@ sub connect(@) {
         push( @sockargs, @{ $self->Socketargs } );
     }
 
-    my $server = $self->Server;
+    # if no server, use " " to induce a non-fatal error
+    my $server = $self->Server || " ";
     my $port = $self->Port || $self->Port( $self->Ssl ? "993" : "143" );
     my ( $ioclass, $sock );
 
