@@ -9,7 +9,7 @@
 use strict;
 use warnings;
 use IO::Socket qw(:crlf);
-use Test::More tests => 53;
+use Test::More tests => 68;
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
 
@@ -28,10 +28,10 @@ q{* CAPABILITY IMAP4rev1 LITERAL+ SASL-IR ID ENABLE IDLE STARTTLS AUTH=PLAIN},
     [
         "Example2 capability",
         [
-q{* CAPABILITY IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE},
+q{* CAPABILITY IMAP4rev1 LOGIN-REFERRALS SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT NAMESPACE UIDPLUS LIST-EXTENDED CONTEXT=SEARCH LIST-STATUS},
         ],
         [
-            qw{IMAP4rev1 LITERAL+ SASL-IR LOGIN-REFERRALS ID ENABLE IDLE SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT MULTIAPPEND URL-PARTIAL CATENATE UNSELECT CHILDREN NAMESPACE UIDPLUS LIST-EXTENDED I18NLEVEL=1 CONDSTORE QRESYNC ESEARCH ESORT SEARCHRES WITHIN CONTEXT=SEARCH LIST-STATUS BINARY MOVE}
+            qw{IMAP4rev1 LOGIN-REFERRALS SORT SORT=DISPLAY THREAD=REFERENCES THREAD=REFS THREAD=ORDEREDSUBJECT NAMESPACE UIDPLUS LIST-EXTENDED CONTEXT=SEARCH LIST-STATUS}
         ],
     ],
 );
@@ -67,9 +67,51 @@ sub run_tests {
 
     # missing capability sanity checks
     is( $imap->has_capability("BOGUS"),
-        undef, "scalar: no has_capability(BOGUS)=undef" );
+        "", "scalar: no has_capability(BOGUS)=''" );    # was undef
     is_deeply( [ $imap->has_capability("BOGUS") ],
-        [undef], "list: no has_capability(BOGUS)=[undef]" );
+        [], "list: no has_capability(BOGUS)=[]" );      # was [undef]
+
+    {
+        my $cap =
+q{* CAPABILITY IMAP4rev1 SORT SORT=DISPLAY I18NLEVEL=1 AUTH=PLAIN AUTH=XTEST};
+        my $imap = Test::Mail::IMAPClient->new( Uid => 0, Debug => 0 );
+        $imap->{_next_history} = [$cap];
+        my ( $e, @e, $v, @v, @r );
+
+        @e = (
+            qw(IMAP4rev1 SORT SORT=DISPLAY I18NLEVEL=1 AUTH=PLAIN AUTH=XTEST I18NLEVEL AUTH)
+        );
+        @r = $imap->capability();
+        is_deeply( \@r, \@e, "exp(@e)" );
+
+        ( $e, @e ) = ( "SORT", qw(DISPLAY) );
+        $v = $imap->has_capability($e);
+        @v = $imap->has_capability($e);
+        ok( $v,        "has_capability($e) true($v) - scalar [@e]" );
+        ok( scalar @v, "has_capability($e) true(@v) - list (@e)" );
+
+        ( $e, @e ) = ( "SORT=DISPLAY", qw(SORT=DISPLAY) );
+        $v = $imap->has_capability($e);
+        @v = $imap->has_capability($e);
+        ok( $v,        "has_capability($e) true($v) - scalar [@e]" );
+        ok( scalar @v, "has_capability($e) true(@v) - list (@e)" );
+
+        ( $e, @e ) = ( "AUTH", qw(PLAIN XTEST) );
+        $v = $imap->has_capability($e);
+        @v = $imap->has_capability($e);
+        ok( $v,        "has_capability($e) true($v) - scalar [@e]" );
+        ok( scalar @v, "has_capability($e) true(@v) - list (@e)" );
+
+        is_deeply( \@v, [@e], "mval($e) expect: [@e]" );
+        $v = $imap->has_capability("AUTH=XTEST");
+        is_deeply( $v, ["AUTH=XTEST"],
+            "mval(AUTH=XTEST) expect: ['AUTH=XTEST']" );
+
+        $v = $imap->has_capability("AUTH=NADA");
+        @v = $imap->has_capability("AUTH=NADA");
+        is_deeply( $v, "", "mval(AUTH=NADA) scalar expect: ''" );
+        is_deeply( \@v, [], "mval(AUTH=NADA) list expect: ()" );
+    }
 
     for my $test (@$tests) {
 
@@ -80,23 +122,18 @@ sub run_tests {
         my @r = $imap->capability();
         is_deeply( [ @r[ 0 .. $#{$exp} ] ], $exp, $comment . ": @$exp" );
 
-        my ( $i, %cap );
-        $cap{$_}++ for (@$exp);
-
         foreach my $e (@$exp) {
-            ok( defined $imap->has_capability($e), "has_capability($e)" );
-            my @kv = split( /=/, $e, 2 );
-            if ( @kv == 2 ) {
-                my $d =
-                    ( $imap->has_capability( $kv[0] ) && $cap{ $kv[0] } )
-                  ? [ 1, 1 ]
-                  : [ undef, "undef" ];
-                is( $imap->has_capability( $kv[0] ),
-                    $d->[0],
-                    "has_capability($kv[0]) (multival scalar) is $d->[1]" );
-            }
-            elsif ( !$i++ ) {
-                is( $imap->has_capability($e), 1, "has_capability($e) eq '1'" );
+            my $v = $imap->has_capability($e);
+            my @v = $imap->has_capability($e);
+            ok( $v,        "has_capability($e) true($v) - scalar" );
+            ok( scalar @v, "has_capability($e) true(@v) - list" );
+
+            my ( $k, $j ) = split( /=/, $e, 2 );
+            if ( defined $j ) {
+                my $v = $imap->has_capability($k);
+                my @v = $imap->has_capability($k);
+                ok( $v, "has_capability($k) true($v) - scalar mval [$e]" );
+                ok( scalar @v, "has_capability($k) true(@v) - list mval ($e)" );
             }
         }
     }

@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.41_02';
+our $VERSION = '3.41_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2828,6 +2828,7 @@ sub uidnext {
     defined $line && $line =~ /\(UIDNEXT\s+([^\)]+)/ ? $1 : undef;
 }
 
+# sort @caps for consistency?
 sub capability {
     my $self = shift;
 
@@ -2839,10 +2840,17 @@ sub capability {
     $self->_imap_command('CAPABILITY')
       or return undef;
 
-    my @caps = map { split } grep s/^\*\s+CAPABILITY\s+//, $self->History;
-    foreach (@caps) {
-        $self->{CAPABILITY}{ uc $_ }++;
-        $self->{ uc $1 } = uc $2 if /(.*?)\=(.*)/;
+    my @caps = map { split } grep /^\*\s+CAPABILITY\s+/, $self->History;
+    splice( @caps, 0, 2 );    # remove * CAPABILITY from array
+
+    # use iterator as we may append to @caps for CAPA=VALUE
+    for ( my $i = 0 ; $i < @caps ; $i++ ) {
+        $self->{CAPABILITY}->{ $caps[$i] } ||= [];
+        my ( $capa, $cval ) = split( /=/, $caps[$i], 2 );
+        if ( defined $cval ) {
+            push( @caps, $capa ) unless exists $self->{CAPABILITY}->{$capa};
+            push( @{ $self->{CAPABILITY}->{$capa} }, $cval );
+        }
     }
 
     return wantarray ? @caps : \@caps;
@@ -2853,7 +2861,20 @@ sub capability {
 sub has_capability {
     my ( $self, $which ) = @_;
     $self->capability or return undef;
-    $which ? $self->{CAPABILITY}{ uc $which } : "";
+    my $aref = [];
+
+    # exists in CAPABILITIES? possibly in CAPA=VALUE format?
+    if ( exists $self->{CAPABILITY}{$which} ) {
+        if ( @{ $self->{CAPABILITY}{$which} } ) {
+            $aref = $self->{CAPABILITY}{$which};
+        }
+        else {
+            $aref = [$which];
+        }
+    }
+
+    return @$aref if wantarray;
+    return scalar @$aref ? $aref : "";
 }
 
 sub imap4rev1 {

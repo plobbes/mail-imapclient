@@ -644,13 +644,13 @@ Example:
   my $features = $imap->capability
     or die "Could not determine capability: ", $imap->LastError;
 
-The B<capability> method returns an array of capabilities as returned
-by the CAPABILITY IMAP Client command, or a reference to an array of
-capabilities if called in scalar context.  If the CAPABILITY IMAP
-Client command fails for any reason then the B<capability> method will
-return C<undef>.  Supported capabilities are cached by the client,
-however, this cache is deleted after a connection is set to
-I<Authenticated> and when L</starttls> is called.
+The B<capability> method returns an array (or arrayref in scalar
+context) of capabilities as returned by the CAPABILITY IMAP client
+command.  If the CAPABILITY IMAP client command fails for any reason
+then the B<capability> method will return C<undef>.  Supported
+capabilities are cached by the client, however, this cache is deleted
+after a connection is set to I<Authenticated> and when L</starttls> is
+called.
 
 See also L</has_capability>.
 
@@ -1295,11 +1295,44 @@ Example:
   my $has_feature = $imap->has_capability($feature)
     or die "Could not do has_capability($feature): $@\n";
 
-Returns true if the IMAP server to which the IMAPClient object is
-connected has the capability specified as an argument to
-B<has_capability>.  If the server does not have the capability then
-the empty string "" is returned, if the underlying L</capability>
-calls fails then undef is returned.
+Returns:
+
+=over 4
+
+=item C<undef>
+
+If the underlying L</capability> calls fails then C<undef> is
+returned.
+
+=item C<""> or C<()>
+
+If the server does not have the requested capability, then either an
+empty string (C<""> in scalar context) or an empty list (C<()> in list
+context) is returned.
+
+=item a I<true> value
+
+If the server has the requested capability, then a I<true> value is
+returned.  The I<true> value depends upon the server response for the
+capability requested.  The value will be an array reference in scalar
+context or an array in list context. The returned data is useful for
+understanding more about specific capabilities.  For example, consider
+the following server CAPABILITY response:
+
+  * CAPABILITY IMAP4rev1 SORT SORT=DISPLAY I18NLEVEL=1 AUTH=PLAIN AUTH=XTEST
+
+Results are returned as shown by I<ret:> comments:
+
+  $cap = $imap->has_capability("IMAP4rev1")    # ret: [ "IMAP4rev1" ]
+  @cap = $imap->has_capability("IMAP4rev1")    # ret: ( "IMAP4rev1" )
+  $cap = $imap->has_capability("SORT")         # ret: [ "DISPLAY" ]
+  @cap = $imap->has_capability("SORT=DISPLAY") # ret: ( "SORT=DISPLAY" )
+  $cap = $imap->has_capability("AUTH")         # ret: [ "PLAIN", "XTEST" ]
+  @cap = $imap->has_capability("AUTH=XTEST")   # ret: ( "AUTH=XTEST" )
+  $cap = $imap->has_capability("AUTH=NADA")    # ret: ''
+  @cap = $imap->has_capability("AUTH=NADA")    # ret: ()
+
+=back
 
 =head2 idle
 
@@ -2227,7 +2260,7 @@ possible... however, we would like you to contribute the knowledge of
 missing features with us.
 
 The B<run> method excepts one or two arguments.  The first argument is
-a string containing an IMAP Client command, including a tag and all
+a string containing an IMAP client command, including a tag and all
 required arguments.  The optional second argument is a string to look
 for that will indicate success.  (The default is C</OK.*/>).  The
 B<run> method returns an array (or arrayref in scalar context) of
@@ -2680,7 +2713,7 @@ Example:
     or die "Could not tag_and_run: $@\n";
 
 The B<tag_and_run> method accepts one or two arguments.  The first
-argument is a string containing an IMAP Client command, without a tag
+argument is a string containing an IMAP client command, without a tag
 but with all required arguments.  The optional second argument is a
 string to look for that will indicate success (without pattern
 delimiters).  The default is C<OK.*>.
@@ -3655,7 +3688,7 @@ Example 2:
   }
 
 In the second example, we used the default method to issue the UID
-IMAP Client command, being careful to use an all-uppercase method name
+IMAP client command, being careful to use an all-uppercase method name
 so as not to inadvertently call the L</Uid> accessor method.  Then we
 parsed out the message UIDs manually, since we don't have the benefit
 of the built-in L</search> method doing it for us.
