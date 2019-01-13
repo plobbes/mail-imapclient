@@ -1321,16 +1321,20 @@ the following server CAPABILITY response:
 
   * CAPABILITY IMAP4rev1 SORT SORT=DISPLAY I18NLEVEL=1 AUTH=PLAIN AUTH=XTEST
 
-Results are returned as shown by I<ret:> comments:
+Results are returned as shown by the trailing comments:
 
-  $cap = $imap->has_capability("IMAP4rev1")    # ret: [ "IMAP4rev1" ]
-  @cap = $imap->has_capability("IMAP4rev1")    # ret: ( "IMAP4rev1" )
-  $cap = $imap->has_capability("SORT")         # ret: [ "DISPLAY" ]
-  @cap = $imap->has_capability("SORT=DISPLAY") # ret: ( "SORT=DISPLAY" )
-  $cap = $imap->has_capability("AUTH")         # ret: [ "PLAIN", "XTEST" ]
-  @cap = $imap->has_capability("AUTH=XTEST")   # ret: ( "AUTH=XTEST" )
-  $cap = $imap->has_capability("AUTH=NADA")    # ret: ''
-  @cap = $imap->has_capability("AUTH=NADA")    # ret: ()
+  $c = $imap->has_capability("IMAP4rev1");    # [ "IMAP4rev1" ]
+  @c = $imap->has_capability("IMAP4rev1");    # ( "IMAP4rev1" )
+  $c = $imap->has_capability("SORT");         # [ "DISPLAY" ]
+  @c = $imap->has_capability("SORT=DISPLAY"); # ( "SORT=DISPLAY" )
+  $c = $imap->has_capability("AUTH");         # [ "PLAIN", "XTEST" ]
+  @c = $imap->has_capability("AUTH");         # ( "PLAIN", "XTEST" )
+  $c = $imap->has_capability("AUTH=XTEST");   # [ "AUTH=XTEST" ]
+  @c = $imap->has_capability("AUTH=XTEST");   # ( "AUTH=XTEST" )
+  $c = $imap->has_capability("AUTH=NADA");    # ''
+  @c = $imap->has_capability("AUTH=NADA");    # ()
+  $c = $imap->has_capability("NADA");         # ''
+  @c = $imap->has_capability("NADA");         # ()
 
 =back
 
