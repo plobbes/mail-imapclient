@@ -1853,9 +1853,9 @@ it.
 Example:
 
   # Get a list of messages in the current folder:
-  my @msgs = $imap->messages or die "Could not messages: $@\n";
+  my @msgs = $imap->messages or die "Could not list messages: $@\n";
   # Get a reference to an array of messages in the current folder:
-  my $msgs = $imap->messages or die "Could not messages: $@\n";
+  my $msgs = $imap->messages or die "Could not list messages: $@\n";
 
 If called in list context, the B<messages> method returns a list of
 all the messages in the currently selected folder.  If called in
