@@ -2544,8 +2544,7 @@ sub parse_headers {
         {    # start new message header
             ( $msgid, my $msgattrs ) = ( $1, $2 );
             $h = {};
-            if ( $self->Uid )    # undef when win2003
-            {
+            if ( $self->Uid ) {    # undef when win2003
                 $msgid = $msgattrs =~ m/\b UID \s+ (\d+)/x ? $1 : undef;
             }
             $headers{$msgid} = $h if $msgid;

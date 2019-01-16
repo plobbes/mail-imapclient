@@ -6,6 +6,8 @@ Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
 version 3.41_03: Sun Jan 13 05:56:42 UTC 2019
+	- rt.cpan.org#128264: parse_message() minor code/POD cleanup
+	  [Dan Jacobson]
 	- rt.cpan.org#128215: verb missing in messages() POD
 	  [Gilles Lamiral and Dan Jacobson]
 	- rt.cpan.org#127271: simplify capability handling via has_capability enhancements

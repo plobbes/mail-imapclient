@@ -2044,16 +2044,18 @@ as the date supplied as the argument.
 
 Example:
 
-  my $hashref = $imap->parse_headers($msg||\@msgs, "Date", "Subject")
+  my $hashref = $imap->parse_headers( $msg || \@msgs, "Date", "Subject" )
     or die "Could not parse_headers: $@\n";
 
 The B<parse_headers> method accepts as arguments a message sequence
 number and a list of header fields.  It returns a hash reference in
 which the keys are the header field names (without the colon) and the
-values are references to arrays of values.  A picture would look
-something like this:
+values are references to arrays of values.  On failure <undef> is
+returned and L</LastError> is set.
 
-  $hashref = $imap->parse_headers(1,"Date","Received","Subject","To");
+A picture would look something like this:
+
+  $hashref = $imap->parse_headers( 1, "Date", "Received", "Subject", "To");
   $hashref = {
       "Date"     => [ "Thu, 09 Sep 1999 09:49:04 -0400" ]  ,
       "Received" => [ q/
@@ -2100,7 +2102,7 @@ sequence number (or UID) and the value is a reference to a hash as
 described above.
 
 An example of using B<parse_headers> to print the date and subject of
-every message in your smut folder could look like this:
+every message in your demo folder could look like this:
 
   use Mail::IMAPClient;
   my $imap = Mail::IMAPClient->new(
