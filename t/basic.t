@@ -14,7 +14,7 @@ BEGIN {
     eval { $params = MyTest->new; };
     $@
       ? plan skip_all => $@
-      : plan tests    => 110;
+      : plan tests    => 111;
 }
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
@@ -279,6 +279,11 @@ ok( $imap->select($target), "select $target" );
 
 my $fields = $imap->search( "HEADER", "Message-id", "NOT_A_MESSAGE_ID" );
 is( scalar @$fields, 0, 'bogus message id does not exist' );
+
+{
+    my $geth = $imap->get_header( 123456789, "Subject" );
+    is( $geth, undef, "get_header on bogus message returns undef" );
+}
 
 my @seen = $imap->seen;
 cmp_ok( scalar @seen, '==', 1, 'have seen 1' );
