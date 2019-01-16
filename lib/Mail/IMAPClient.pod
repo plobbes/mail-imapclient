@@ -215,8 +215,7 @@ Here are some examples:
       Password => $pass,
       Clear    => 5,   # Unnecessary since '5' is the default
       # ...            # Other key=>value pairs go here
-  )
-    or die "Cannot connect to $host as $id: $@";
+  ) or die "Cannot connect to $host as $id: $@";
 
 See also L</Parameters>, L</connect> and L</login> for more
 information on how to manually connect and login after B<new>.
@@ -604,7 +603,7 @@ before the date supplied as the argument to the B<before> method.
 Example:
 
   my $string = $imap->body_string($msgId)
-    or die "Could not body_string: ", $imap->LastError;
+    or die "body_string failed: ", $imap->LastError;
 
 The B<body_string> method accepts a message sequence number (or a
 message UID, if the L</Uid> parameter is set to true) as an argument
@@ -1107,8 +1106,8 @@ raw values back in this case.
 
 Example:
 
-  my @flags = $imap->flags($msgid)
-    or die "Could not flags: $@\n";
+  my $flags = $imap->flags($msgid)
+    or die "flags failed: $@\n";
 
 The B<flags> method implements the FETCH IMAP client command to list a
 single message's flags.  It accepts one argument, a message sequence
@@ -1422,7 +1421,7 @@ L</capability> calls fails then undef is returned.
 Example:
 
   my $msg_internal_date = $imap->internaldate($msgid)
-    or die "Could not internaldate: $@\n";
+    or die "internaldate failed: $@\n";
 
 B<internaldate> accepts one argument, a message id (or UID if the
 L</Uid> parameter is true), and returns that message's internal date
@@ -1773,7 +1772,7 @@ you.
 Example:
 
   my $msgcount = $imap->message_count($folder);
-  defined($msgcount) or die "Could not message_count: $@\n";
+  defined($msgcount) or die "message_count failed: $@\n";
 
 The B<message_count> method accepts the name of a folder as an
 argument and returns the number of messages in that folder.
@@ -1797,7 +1796,7 @@ mileage may vary.
 Example:
 
   my $string = $imap->message_string($msgid)
-    or die "Could not message_string: $@\n";
+    or die "message_string failed: $@\n";
 
 The B<message_string> method accepts a message sequence number (or
 message UID if L</Uid> is true) as an argument and returns the message
@@ -1811,7 +1810,7 @@ I<Peek> is set to a true value.
 Example:
 
   $imap->message_to_file( $file, @msgs )
-    or die "Could not message_to_file: $@\n";
+    or die "message_to_file failed: $@\n";
 
 The B<message_to_file> method accepts a filename or file handle and
 one or more message sequence numbers (or message UIDs if L</Uid> is
@@ -1853,17 +1852,18 @@ it.
 Example:
 
   # Get a list of messages in the current folder:
-  my @msgs = $imap->messages or die "Could not list messages: $@\n";
+  my @msgs = $imap->messages or warn "Could not list messages\n";
   # Get a reference to an array of messages in the current folder:
-  my $msgs = $imap->messages or die "Could not list messages: $@\n";
+  my $msgs = $imap->messages or die "Get messages failed: $@\n";
 
 If called in list context, the B<messages> method returns a list of
 all the messages in the currently selected folder.  If called in
 scalar context, it returns a reference to an array containing all the
-messages in the folder.  If you have the L</Uid> parameter turned off,
-then this is the same as specifying C<1 ... $imap-E<gt>L<message_count>>;
-if you have UID set to true then this is the same as specifying
+messages in the folder.  This is the same as specifying
 C<$imap-E<gt>L</search>("ALL")>.
+
+An empty list is returned when no messages are found.  On failure
+<undef> is returned and L</LastError> is set.
 
 =head2 migrate
 
@@ -1980,7 +1980,7 @@ original message you will need to run L</expunge> (or L</close>).
 Example:
 
   my $refs = $imap->namespace
-    or die "Could not namespace: $@\n";
+    or die "namespace failed: $@\n";
 
 The namespace method runs the NAMESPACE IMAP command (as defined in
 RFC 2342).  When called in a list context, it returns a list of three
@@ -2147,7 +2147,7 @@ Example:
 
   my $count = 0;
   defined($count = $imap->recent_count($folder))
-    or die "Could not recent_count: $@\n";
+    or die "recent_count failed: $@\n";
 
 The B<recent_count> method accepts as an argument a folder name.  It
 returns the number of recent messages in the folder (as returned by
@@ -2187,8 +2187,8 @@ Version note: method added in Mail::IMAPClient 3.17
 
 Example:
 
-  $imap->rename($oldname,$nedwname)
-    or die "Could not rename: $@\n";
+  $imap->rename( $oldname, $nedwname )
+    or die "rename failed: $@\n";
 
 The B<rename> method accepts two arguments: the name of an existing
 folder, and a new name for the folder.  The existing folder will be
@@ -2200,7 +2200,7 @@ unsuccessful.
 
 Example:
 
-  $imap->restore_message(@msgs) or die "Could not restore_message: $@\n";
+  $imap->restore_message(@msgs) or die "restore_message failed: $@\n";
 
 The B<restore_message> method is used to undo a previous
 L</delete_message> operation (but not if there has been an intervening
@@ -2259,7 +2259,7 @@ returns a (slightly) more meaningful value. Also it's easier to type.
 
 Example:
 
-  $imap->run(@args) or die "Could not run: $@\n";
+  $imap->run(@args) or die "run failed: $@\n";
 
 The B<run> method is provided to make those uncommon things
 possible... however, we would like you to contribute the knowledge of
@@ -2360,7 +2360,7 @@ response to the I<SEARCH> command.
 
 Example:
 
-  $imap->see(@msgs) or die "Could not see: $@\n";
+  $imap->see(@msgs) or die "see failed: $@\n";
 
 The B<see> method accepts a list of one or more messages sequence
 numbers, or a single reference to an array of one or more message
@@ -2389,7 +2389,7 @@ array (rather than the array itself) will be returned.
 
 Example:
 
-  $imap->select($folder) or die "Could not select: $@\n";
+  $imap->select($folder) or die "select failed: $@\n";
 
 The B<select> method selects a folder and changes the object's state
 to I<Selected>.  It accepts one argument, which is the name of the
@@ -2754,7 +2754,7 @@ returns undef.
 
 Example:
 
-  my $nextUid = $imap->uidnext($folder) or die "Could not uidnext: $@\n";
+  my $nextUid = $imap->uidnext($folder) or die "uidnext failed: $@\n";
 
 The B<uidnext> method accepts one argument, the name of a folder, and
 returns the numeric string that is the next available message UID for
@@ -2798,7 +2798,7 @@ they will be message sequence numbers.
 Example:
 
   my $validity = $imap->uidvalidity($folder)
-    or die "Could not uidvalidity: $@\n";
+    or die "uidvalidity failed: $@\n";
 
 The B<uidvalidity> method accepts one argument, the name of a folder,
 and returns the numeric string that is the unique identifier validity
@@ -2840,9 +2840,6 @@ the L</Uid> parameter is true then an array of message UID's will be
 returned instead.  If called in scalar context than a pointer to the
 array (rather than the array itself) will be returned.
 
-Note that when specifying the flag in question, the preceding
-backslash (\) is entirely optional.
-
 =head2 unseen_count
 
 Example:
@@ -2862,7 +2859,7 @@ messages in the currently selected Folder.
 Example:
 
   $imap->unset_flag( "\Seen", @msgs )
-    or die "Could not unset_flag: $@\n";
+    or die "unset_flag failed: $@\n";
 
 The B<unset_flag> method accepts the name of a flag as its first
 argument and a list of one or more messages sequence numbers, or a
