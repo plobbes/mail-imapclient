@@ -9,7 +9,7 @@
 use strict;
 use warnings;
 use IO::Socket qw(:crlf);
-use Test::More tests => 68;
+use Test::More tests => 70;
 
 BEGIN { use_ok('Mail::IMAPClient') or exit; }
 
@@ -83,6 +83,10 @@ q{* CAPABILITY IMAP4rev1 SORT SORT=DISPLAY I18NLEVEL=1 AUTH=PLAIN AUTH=XTEST};
         );
         @r = $imap->capability();
         is_deeply( \@r, \@e, "exp(@e)" );
+
+	# imap4rev1 - case insensitive
+	ok( $imap->has_capability("iMaP4ReV1"), 'has_capability("iMaP4ReV1")' );
+	ok( $imap->imap4rev1(), 'imap4rev1()' );
 
         ( $e, @e ) = ( "SORT", qw(DISPLAY) );
         $v = $imap->has_capability($e);
