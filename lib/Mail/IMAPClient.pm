@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.43_03';
+our $VERSION = '3.43_04';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -2568,7 +2568,7 @@ sub parse_headers {
             next;
         }
 
-        if ( $header and $header =~ s/^(\S+)\:\s*// ) {
+        if ( $header and $header =~ s/^(\S+?)\:\s*// ) {
             $field = $fieldmap{ lc $1 } || $1;
             push @{ $h->{$field} }, $header;
         }
