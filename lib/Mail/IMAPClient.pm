@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.42';
+our $VERSION = '3.43_02';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -3047,9 +3047,9 @@ sub append_string($$$;$$) {
 
     my $data = join '', $self->Results;
 
-    # look for something like return size or self if no size found:
-    # <tag> OK [APPENDUID <uid> <size>] APPEND completed
-    my $ret = $data =~ m#\s+(\d+)\]# ? $1 : $self;
+    # look for append-uid otherwise return self
+    # <tag> OK [APPENDUID <uidvalidity> <append-uid>] APPEND completed
+    my $ret = $data =~ m#APPENDUID\s+\S+\s+(\d+)\]# ? $1 : $self;
 
     return $ret;
 }
