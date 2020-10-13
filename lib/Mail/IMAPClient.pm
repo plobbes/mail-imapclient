@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.43_02';
+our $VERSION = '3.43_03';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -505,7 +505,7 @@ sub compress {
     }
 
     $self->{Prewritemethod} = sub {
-        my ( $imap, $string ) = @_;
+        my ( $self, $string ) = @_;
 
         my ( $rc, $out1, $out2 );
         ( $out1, $rc ) = $do->deflate($string);
@@ -530,7 +530,7 @@ sub compress {
     };
 
     $self->{Readmethod} = sub {
-        my ( $imap, $fh, $buf, $len, $off ) = @_;
+        my ( $self, $fh, $buf, $len, $off ) = @_;
 
         # get more data, but empty $Ibuf first if any data is left
         my ( $lz, $li ) = ( length $Zbuf, length $Ibuf );
