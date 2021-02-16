@@ -7,7 +7,7 @@ use strict;
 use warnings;
 
 package Mail::IMAPClient;
-our $VERSION = '3.43_04';
+our $VERSION = '3.43_05';
 
 use Mail::IMAPClient::MessageSet;
 
@@ -535,7 +535,7 @@ sub compress {
         # get more data, but empty $Ibuf first if any data is left
         my ( $lz, $li ) = ( length $Zbuf, length $Ibuf );
         if ( $lz || !$li ) {
-            my $ret = sysread( $fh, $Zbuf, $len, length $Zbuf );
+            my $ret = sysread( $fh, $Zbuf, $len || 4096, length $Zbuf );
             $lz = length $Zbuf;
             return $ret if ( !$ret && !$lz );    # $ret is undef or 0
         }
@@ -548,6 +548,16 @@ sub compress {
                 return undef;
             }
             $Ibuf .= $tbuf;
+            $li = length $Ibuf;
+        }
+
+        if ( !$li ) {
+            # note: faking EAGAIN here is only safe with level-triggered
+            # I/O readiness notifications (select, poll).  Refactoring
+            # callers will be needed in the unlikely case somebody wants
+            # to use edge-triggered notifications (EV_CLEAR, EPOLLET).
+            $! = EAGAIN;
+            return undef;
         }
 
         # pull desired length of data from $Ibuf
