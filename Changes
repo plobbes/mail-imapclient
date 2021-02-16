@@ -5,7 +5,8 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
-version 3.43_05: Tue Feb 16 16:07:04 UTC 2021
+version 3.43: Tue Feb 16 16:53:26 UTC 2021
+	- admin: update copyright, move from rt.cpan.org (retired) to github
 	- rt.cpan.org#132720: compress: Readmethod: avoid false-positive EOF
 	  [Eric Wong]
 	- rt.cpan.org#129920: Parsing headers fails under special condition
