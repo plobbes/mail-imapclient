@@ -2,7 +2,7 @@
 
 use strict;
 use warnings;
-use Test::More tests => 51;
+use Test::More tests => 53;
 
 BEGIN { use_ok('Mail::IMAPClient::BodyStructure') or exit; }
 
@@ -99,12 +99,20 @@ ok( defined $bsobj, 'parsed ninth' );
 is_deeply( [ $bsobj->parts ], \@exp, 'bs9 parts' )
   or diag( join(" ", $bsobj->parts ) );
 
-# multipart/alternative test
+# test for Axigen additional fields
 my $bs10 = q{(BODYSTRUCTURE (("TEXT" "plain" ("charset" "utf-8") NIL NIL "base64" 534 8 NIL NIL NIL NIL NIL NIL) ("TEXT" "html" ("charset" "utf-8") NIL NIL "base64" 1266 18 NIL NIL NIL NIL NIL NIL) "alternative" ("boundary" "--_com.samsung.android.email_2722452845804670") NIL NIL NIL NIL NIL) UID 1139)};
 $bsobj = Mail::IMAPClient::BodyStructure->new($bs10);
 @exp =qw(1 2);
 ok( defined $bsobj, 'parsed tenth' );
 is_deeply( [ eval { $bsobj->parts } ], \@exp, 'bs10 parts' )
+  or diag( join(" ", eval { $bsobj->parts } ) );
+
+# test for Axigen related
+my $bs11 = q{FETCH (BODYSTRUCTURE ((("TEXT" "plain" ("charset" "Windows-1252") NIL NIL "quoted-printable" 2779 85 NIL NIL NIL NIL NIL NIL)("TEXT" "html" ("charset" "Windows-1252") NIL NIL "quoted-printable" 8318 170 NIL NIL NIL NIL NIL NIL) "alternative" ("boundary" "_000_PS2P216MB0563FA84103338C5C50A9A5DD11A0PS2P216MB0563KORP_") NIL NIL NIL NIL NIL)("image" "jpeg" ("name" "A112656976F74B5F829A35ADCC3422DD.jpeg") "A112656976F74B5F829A35ADCC3422DD" "A112656976F74B5F829A35ADCC3422DD.jpeg" "base64" 62992 NIL ("inline" ("filename" "A112656976F74B5F829A35ADCC3422DD.jpeg" "size" "46032" "creation-date" "Fri, 23 Oct 2020 03:04:41 GMT" "modification-date" "Fri, 23 Oct 2020 03:04:41 GMT")) NIL NIL NIL NIL) "related" ("boundary" "_004_PS2P216MB0563FA84103338C5C50A9A5DD11A0PS2P216MB0563KORP_" "type" "multipart/alternative") NIL ("en-AU") NIL NIL NIL) UID 1591)};
+$bsobj = Mail::IMAPClient::BodyStructure->new($bs11);
+@exp =qw(1 1.1 1.2 2);
+ok( defined $bsobj, 'parsed eleventh' );
+is_deeply( [ eval { $bsobj->parts } ], \@exp, 'bs11 parts' )
   or diag( join(" ", eval { $bsobj->parts } ) );
 
 # envelope

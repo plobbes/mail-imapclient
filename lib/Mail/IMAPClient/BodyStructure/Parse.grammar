@@ -131,7 +131,7 @@ textmessage: 	TEXT <commit> basicfields textlines(?) bodyMD5(?)
 	}
 
 othertypemessage: bodytype basicfields bodyMD5(?) bodydisp(?)
-	          bodylang(?) bodyextra(?)
+	          bodylang(?) bodyextra(?) bodyextensions(s?)
 	{ $return = { bodytype => $item{bodytype} };
 	  take_optional_items($return, \%item
              , qw/bodyMD5 bodydisp bodylang bodyextra/ );

@@ -5,6 +5,10 @@ Changes from 2.99_01 to 3.16    made by Mark Overmeer
 Changes from 0.09    to 2.99_01 made by David Kernen
 	- Potential compatibility issues from 3.17+ highlighted with '*'
 
+version 3.43_01: Fri Oct 23 20:23:00 UTC 2020
+	- rt.cpan.org#133496: add support for Axigen server, which has
+	  bodystructure extensions in non-text parts
+
 version 3.43: Tue Feb 16 16:53:26 UTC 2021
 	- admin: update copyright, move from rt.cpan.org (retired) to github
 	- rt.cpan.org#132720: compress: Readmethod: avoid false-positive EOF
@@ -14,13 +18,13 @@ version 3.43: Tue Feb 16 16:53:26 UTC 2021
 	- rt.cpan.org#132654: avoid cyclic reference on ->compress
 	  [Eric Wong]
 	- rt.cpan.org#132380: append_string can fail to match APPENDUID in response
-	  [Radomír Polách]
+	  [RadomÃ­r PolÃ¡ch]
 	- rt.cpan.org#133496: allow for undocumented BODYSTRUCTURE extensions
 	  [Rhesa Rozendaal]
 
 version 3.42: Sun Feb 24 00:43:29 UTC 2019
 	- rt.cpan.org#12859: has_capability() changes in 3.41 broke imap4rev1()
-	  [Gilles Lamiral and Gábor Leszlauer]
+	  [Gilles Lamiral and GÃ¡bor Leszlauer]
 	- updated http:// to https:// URLs for referenced resources
 	- updated copyright for 2019
 
@@ -115,7 +119,7 @@ version 3.35: Fri, Nov 22, 2013  2:18:41 PM
 	  + cleanup Escaped_results()
 	  + new methods: Escaped_history() _escaped_trans_data()
 	  + removed method: _list_response_preprocess()
-	  [Gilles Lamiral, Victor Lé]
+	  [Gilles Lamiral, Victor LÃ©]
 	- rt.cpan.org#90315: getacl on a folder returned as literal failed
 	  + _read_line could remove extra space when literal data was received
 	  [Carl Karcher]
@@ -238,7 +242,7 @@ version 3.27: Sun Feb 13 14:37:27 EST 2011
 	- rt.cpan.org#65470: uninitialized warning in message_to_file
 	  [Gilles Lamiral, Mark Hedges]
 	- rt.cpan.org#61835: (DOC) in LIST context undef may be returned
-	  [Stefan Völkel]
+	  [Stefan VÃ¶lkel]
 	  + warn/highlight behavior in docs Errors section
 	- updated documentation
 	  + migrate() documentation fixed
@@ -703,7 +707,7 @@ version 3.07: Mon Apr 28 09:17:30 CEST 2008
 	Fixes:
 
 	- expunge with no folder specified produced "use of undef"
-	  error.  Fixed by [André Warnier]
+	  error.  Fixed by [AndrÃ© Warnier]
 
 	- additional arguments for create [Michael Bacon]
 
@@ -1119,7 +1123,7 @@ Added some new parameters to support alternate authentication mechanisms:
       	Readmethod 
 
 Mail::IMAPClient has supported cram-md5 authentication "out of the box"
-as of 2.2.6 (courtesy of Ville Skyttä). I also have digest-md5 working
+as of 2.2.6 (courtesy of Ville SkyttÃ¤). I also have digest-md5 working
 in my lab with quality of protection levels "auth" and "integrity", but
 not "confidentiality". I'm hoping to get the confidentiality part working
 soon but so far have only managed to authenticate, send an encrypted command, 
@@ -1137,7 +1141,7 @@ get_bodystructure...
 Fixed two related bugs in Parser.pm that caused
 get_bodystructure and get_envelope to fail if the
 UID nnnnn part of a fetch response follows all the
-other stuff.  Thanks to Raphaël Langella for reporting this bug.
+other stuff.  Thanks to RaphaÃ«l Langella for reporting this bug.
 
 Enhanced several methods to use MessageSets when the
 Ranges parameter is true. There are still more methods that
@@ -1164,7 +1168,7 @@ Fixed a bug in the test suite that caused the cram-md5 tests to fail
 if you are not running the extended tests. (Introduced in 2.2.6)
 
 Fixed a bug that affected users on platforms that do not support 
-fcntl (i.e. NT).  Thanks to Raphaël Langella for reporting this bug.
+fcntl (i.e. NT).  Thanks to RaphaÃ«l Langella for reporting this bug.
 
 Changes in version 2.2.6
 ------------------------
@@ -1209,7 +1213,7 @@ is the only authentication other than plain text that is currently supported
 "out of the box", it will be the default authentication mechanism for any 
 server that supports it. See the pod for the Authmechanism and Authcallback
 parameters (which were also added in this release) and the doc for the 
-authenticate method (which has been around a while). Many thanks to Ville Skyttä
+authenticate method (which has been around a while). Many thanks to Ville SkyttÃ¤
 for providing the code that makes up the heart of this new support, as well
 as to Gisle Aas for the Digest::HMAC_MD5 and MIME::Base64.
 

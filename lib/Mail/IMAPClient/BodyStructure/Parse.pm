@@ -10354,7 +10354,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
     while (!$_matched && !$commit)
     {
         
-        Parse::RecDescent::_trace(q{Trying production: [bodytype basicfields bodyMD5 bodydisp bodylang bodyextra]},
+        Parse::RecDescent::_trace(q{Trying production: [bodytype basicfields bodyMD5 bodydisp bodylang bodyextra bodyextensions]},
                       Parse::RecDescent::_tracefirst($_[1]),
                       q{othertypemessage},
                       $tracelevel)
@@ -10539,6 +10539,34 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
         
 
 
+        Parse::RecDescent::_trace(q{Trying repeated subrule: [bodyextensions]},
+                  Parse::RecDescent::_tracefirst($text),
+                  q{othertypemessage},
+                  $tracelevel)
+                    if defined $::RD_TRACE;
+        $expectation->is(q{bodyextensions})->at($text);
+        
+        unless (defined ($_tok = $thisparser->_parserepeat($text, \&Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::bodyextensions, 0, 100000000, $_noactions,$expectation,sub { \@arg },undef)))
+        {
+            Parse::RecDescent::_trace(q{<<Didn't match repeated subrule: [bodyextensions]>>},
+                          Parse::RecDescent::_tracefirst($text),
+                          q{othertypemessage},
+                          $tracelevel)
+                            if defined $::RD_TRACE;
+            last;
+        }
+        Parse::RecDescent::_trace(q{>>Matched repeated subrule: [bodyextensions]<< (}
+                    . @$_tok . q{ times)},
+
+                      Parse::RecDescent::_tracefirst($text),
+                      q{othertypemessage},
+                      $tracelevel)
+                        if defined $::RD_TRACE;
+        $item{q{bodyextensions(s?)}} = $_tok;
+        push @item, $_tok;
+        
+
+
         Parse::RecDescent::_trace(q{Trying action},
                       Parse::RecDescent::_tracefirst($text),
                       q{othertypemessage},
@@ -10566,7 +10594,7 @@ sub Parse::RecDescent::Mail::IMAPClient::BodyStructure::Parse::othertypemessage
         $item{__ACTION1__}=$_tok;
         
 
-        Parse::RecDescent::_trace(q{>>Matched production: [bodytype basicfields bodyMD5 bodydisp bodylang bodyextra]<<},
+        Parse::RecDescent::_trace(q{>>Matched production: [bodytype basicfields bodyMD5 bodydisp bodylang bodyextra bodyextensions]<<},
                       Parse::RecDescent::_tracefirst($text),
                       q{othertypemessage},
                       $tracelevel)
@@ -16472,7 +16500,8 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                           'bodyMD5',
                                                                           'bodydisp',
                                                                           'bodylang',
-                                                                          'bodyextra'
+                                                                          'bodyextra',
+                                                                          'bodyextensions'
                                                                         ],
                                                              'changed' => 0,
                                                              'impcount' => 0,
@@ -16544,6 +16573,17 @@ package Mail::IMAPClient::BodyStructure::Parse; sub new { my $self = bless( {
                                                                                                          'min' => 0,
                                                                                                          'repspec' => '?',
                                                                                                          'subrule' => 'bodyextra'
+                                                                                                       }, 'Parse::RecDescent::Repetition' ),
+                                                                                                bless( {
+                                                                                                         'argcode' => undef,
+                                                                                                         'expected' => undef,
+                                                                                                         'line' => 134,
+                                                                                                         'lookahead' => 0,
+                                                                                                         'matchrule' => 0,
+                                                                                                         'max' => 100000000,
+                                                                                                         'min' => 0,
+                                                                                                         'repspec' => 's?',
+                                                                                                         'subrule' => 'bodyextensions'
                                                                                                        }, 'Parse::RecDescent::Repetition' ),
                                                                                                 bless( {
                                                                                                          'code' => '{ $return = { bodytype => $item{bodytype} };
