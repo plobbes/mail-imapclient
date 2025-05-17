@@ -3285,6 +3285,24 @@ sub authenticate {
             Authen::NTLM::ntlm($code);
         };
     }
+    elsif ( $scheme eq 'OAUTHBEARER' ) {
+        $response ||= sub {
+            my ( $code, $client ) = @_;
+            my $email = $client->User;
+            my $access_token = $client->Password; # OAuth2 token
+            my $auth_string = "n,a=$email,\001auth=Bearer $access_token\001\001";
+            encode_base64($auth_string, '');
+        };
+    }
+    elsif ( $scheme eq 'XOAUTH2' ) {
+        $response ||= sub {
+            my ( $code, $client ) = @_;
+            my $email = $client->User;
+            my $access_token = $client->Password; # OAuth2 token
+            my $auth_string = "user=$email\001auth=Bearer $access_token\001\001";
+            encode_base64($auth_string, '');
+        };
+    }
 
     my $resp = $response->( $code, $self );
     unless ( defined($resp) ) {
